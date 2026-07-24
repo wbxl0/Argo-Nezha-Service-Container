@@ -183,7 +183,7 @@ EOF
     fi
     if [ -z "$AGENT_VERSION" ]; then
       wget -O $WORK_DIR/nezha-agent.zip ${GH_PROXY}https://github.com/nezhahq/agent/releases/latest/download/nezha-agent_linux_$ARCH.zip
-    elif [[ "$AGENT_VERSION" =~ 1\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
+    elif [[ "$AGENT_VERSION" =~ [1-2]\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
       AGENT_LATEST=$(sed 's/v//; s/^/v&/' <<< "$AGENT_VERSION")
       wget -O $WORK_DIR/nezha-agent.zip ${GH_PROXY}https://github.com/nezhahq/agent/releases/download/$AGENT_LATEST/nezha-agent_linux_$ARCH.zip
     else
@@ -195,7 +195,7 @@ EOF
     wget -O /tmp/dashboard.zip ${GH_PROXY}https://github.com/naiba/nezha/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip
     if [ -z "$AGENT_VERSION" ]; then
       wget -O $WORK_DIR/nezha-agent.zip ${GH_PROXY}https://github.com/nezhahq/agent/releases/download/v0.20.5/nezha-agent_linux_$ARCH.zip
-    elif [[ "$AGENT_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
+    elif [[ "$AGENT_VERSION" =~ [0-2]\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
       AGENT_LATEST=$(sed 's/v//; s/^/v&/' <<< "$AGENT_VERSION")
       wget -O $WORK_DIR/nezha-agent.zip ${GH_PROXY}https://github.com/nezhahq/agent/releases/download/$AGENT_LATEST/nezha-agent_linux_$ARCH.zip
     else
