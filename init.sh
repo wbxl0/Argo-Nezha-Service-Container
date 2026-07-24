@@ -272,11 +272,11 @@ gpu: false
 insecure_tls: true
 ip_report_period: 1800
 report_delay: 3
-server: localhost:$GRPC_PORT
+server: localhost:$GRPC_PROXY_PORT
 skip_connection_count: false
 skip_procs_count: false
 temperature: false
-tls: false
+tls: true
 use_gitee_to_upgrade: false
 use_ipv6_country_code: false
 uuid: $AGENT_UUID
