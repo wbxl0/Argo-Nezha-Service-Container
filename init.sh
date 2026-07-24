@@ -10,7 +10,7 @@ if [ ! -s /etc/supervisor/conf.d/damon.conf ]; then
   WEB_PORT=8080
   PRO_PORT=${PRO_PORT:-'80'}
   BACKUP_TIME=${BACKUP_TIME:-'0 4 * * *'}
-  BACKUP_NUM= ${BACKUP_NUM:-'5'}
+  BACKUP_NUM=${BACKUP_NUM:-'5'}
   CADDY_HTTP_PORT=2052
   WORK_DIR=/dashboard
 
@@ -249,7 +249,7 @@ EOF
     fi
     cat > ${WORK_DIR}/data/config.yml << EOF
 client_secret: $LOCAL_TOKEN
-debug: false
+debug: true
 disable_command_execute: false
 disable_nat: false
 disable_send_query: false
@@ -257,11 +257,11 @@ gpu: false
 insecure_tls: true
 ip_report_period: 1800
 report_delay: 3
-server: $ARGO_DOMAIN:$GRPC_PROXY_PORT
+server: localhost:$GRPC_PORT
 skip_connection_count: false
 skip_procs_count: false
 temperature: false
-tls: true
+tls: false
 use_gitee_to_upgrade: false
 use_ipv6_country_code: false
 uuid: $AGENT_UUID
@@ -440,8 +440,10 @@ stdout_logfile=/dev/null
 command=$AG_RUN
 autostart=true
 autorestart=true
-stderr_logfile=/dev/null
-stdout_logfile=/dev/null
+stderr_logfile=/tmp/agent_err.log
+stdout_logfile=/tmp/agent.log
+stdout_logfile_maxbytes=1MB
+stdout_logfile_backups=2
 
 [program:argo]
 command=$WORK_DIR/$ARGO_RUN
