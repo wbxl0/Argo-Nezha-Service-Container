@@ -94,7 +94,11 @@ http {
 }
 EOF
   else
-    CADDY_LATEST=$(wget -qO- "${GH_PROXY}https://api.github.com/repos/caddyserver/caddy/releases/latest" | awk -F [v\"] '/"tag_name"/{print $5}' || echo '2.7.6')
+    if [[ "$CADDY_VERSION" =~ [0-9]{1}\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
+      CADDY_LATEST=$(sed 's/[A-Za-z]//' <<< "$CADDY_VERSION")
+    else
+      CADDY_LATEST=2.9.1
+    fi
     wget -c ${GH_PROXY}https://github.com/caddyserver/caddy/releases/download/v${CADDY_LATEST}/caddy_${CADDY_LATEST}_linux_${ARCH}.tar.gz -qO- | tar xz -C $WORK_DIR caddy
     GRPC_PROXY_RUN="$WORK_DIR/caddy run --config $WORK_DIR/Caddyfile --watch"
     cat > $WORK_DIR/Caddyfile  << EOF
@@ -113,28 +117,17 @@ EOF
 }
 
 EOF
-    if [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
-      if [ -n "$UUID" ] && [ "$UUID" != "0" ]; then
-        cat >> $WORK_DIR/Caddyfile << EOF
+    if [ -n "$UUID" ] && [ "$UUID" != "0" ]; then
+      cat >> $WORK_DIR/Caddyfile << EOF
 :$PRO_PORT {
-    reverse_proxy /vls* {
-        to localhost:8002
+    handle /${UUID} {
+        file_server {
+            root /tmp
+            browse
+        }
+        rewrite * /list.log
     }
 
-    reverse_proxy /vms* {
-        to localhost:8001
-    }
-
-    reverse_proxy {
-        to localhost:$WEB_PORT
-    }
-}
-EOF
-      fi
-    else
-      if [ -n "$UUID" ] && [ "$UUID" != "0" ]; then
-        cat >> $WORK_DIR/Caddyfile << EOF
-:$PRO_PORT {
     reverse_proxy /vls* {
         to localhost:8002
     }
@@ -143,8 +136,28 @@ EOF
         to localhost:8001
     }
     
+EOF
+      if [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
+        cat >> $WORK_DIR/Caddyfile << EOF
+    reverse_proxy {
+        to localhost:$WEB_PORT
+    }
+}
+EOF
+      else
+        cat >> $WORK_DIR/Caddyfile << EOF
     reverse_proxy {
         to localhost:$GRPC_PORT
+    }
+}
+EOF
+      fi
+    else
+      if [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
+        cat >> $WORK_DIR/Caddyfile << EOF
+:$PRO_PORT {
+    reverse_proxy {
+        to localhost:$WEB_PORT
     }
 }
 EOF
@@ -233,6 +246,8 @@ site_name: "Nezha Probe"
 install_host: $ARGO_DOMAIN:$GRPC_PROXY_PORT
 location: Asia/Shanghai
 tls: true
+tsdb:
+  data_path: "data/tsdb"
 EOF
     if [[ -n "$GH_CLIENTID" && -n "$GH_CLIENTSECRET" ]]; then
       cat >> ${WORK_DIR}/data/config.yaml << EOF
@@ -491,10 +506,12 @@ if command -v base64 >/dev/null 2>&1; then
   vm_url="${XIEYI2}ess://$(echo -n "$VM_SS" | base64 -w 0)"
 fi
 x_url="${up_url}\n${vm_url}"
-encoded_url=$(echo -e "${x_url}\n${up_url2}" | base64 -w 0)
-echo "============  <节点信息:>  ========  "
+encoded_url=$(echo -e "${x_url}" | base64 -w 0)
+echo -e "$encoded_url" > /tmp/list.log
+echo "============  <订阅地址:>  ========  "
 echo "  "
-echo "$encoded_url"
+echo "网址/$UUID"
+echo "$ARGO_DOMAIN/$UUID"
 echo "  "
 echo "=============================="
 fi
