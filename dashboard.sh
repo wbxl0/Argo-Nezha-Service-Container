@@ -326,14 +326,14 @@ dashboard_variables() {
     [[ -z "$ARGO_AUTH" || -z "$ARGO_DOMAIN" ]] && error "\n $(text 18) "
   fi
 
-  [ -z "$GH_REPO"] && reading "\n (8/14) $(text 14) " GH_REPO
+  [ -z "$GH_REPO" ] && reading "\n (8/14) $(text 14) " GH_REPO
   if [ -n "$GH_REPO" ]; then
     [ -z "$GH_BACKUP_USER" ] && reading "\n (9/14) $(text 15) " GH_BACKUP_USER
     GH_BACKUP_USER=${GH_BACKUP_USER:-$GH_USER}
-    [ -z "$GH_EMAIL"] && reading "\n (10/14) $(text 16) " GH_EMAIL
-    [ -z "$GH_PAT"] && reading "\n (11/14) $(text 17) " GH_PAT
-    [ -z "$BACKUP_TIME"] && reading "\n (12/14) $(text 43) " BACKUP_TIME
-    [ -z "$BACKUP_NUM"] && reading "\n (13/14) $(text 44) " BACKUP_NUM
+    [ -z "$GH_EMAIL" ] && reading "\n (10/14) $(text 16) " GH_EMAIL
+    [ -z "$GH_PAT" ] && reading "\n (11/14) $(text 17) " GH_PAT
+    [ -z "$BACKUP_TIME" ] && reading "\n (12/14) $(text 43) " BACKUP_TIME
+    [ -z "$BACKUP_NUM" ] && reading "\n (13/14) $(text 44) " BACKUP_NUM
   fi
   if [ -z "$BACKUP_TIME" ]; then
       BACKUP_TIME="0 4 * * *"
@@ -341,7 +341,7 @@ dashboard_variables() {
   if [ -z "$BACKUP_NUM" ]; then
         BACKUP_NUM=5
   fi
-  [ -z "$AUTO_RENEW_OR_NOT"] && reading "\n (14/14) $(text 41) " AUTO_RENEW_OR_NOT
+  [ -z "$AUTO_RENEW_OR_NOT" ] && reading "\n (14/14) $(text 41) " AUTO_RENEW_OR_NOT
   grep -qiw 'n' <<< "$AUTO_RENEW_OR_NOT" && IS_AUTO_RENEW=#
 }
 
@@ -428,7 +428,7 @@ EOF
   # unzip 解压面板主应用
   if [ "$STATUS" = "$(text 26)" ]; then
     unzip -o -q $TEMP_DIR/dashboard.zip -d $TEMP_DIR 2>&1
-    [ -d /tmp/dist ] && mv $TEMP_DIR/dist/dashboard-linux-$ARCH $TEMP_DIR/dashboard-linux-$ARCH && rm -rf $TEMP_DIR/dist
+    [ -d "$TEMP_DIR/dist" ] && mv "$TEMP_DIR/dist/dashboard-linux-$ARCH" "$TEMP_DIR/dashboard-linux-$ARCH" && rm -rf "$TEMP_DIR/dist"
     chmod +x $TEMP_DIR/dashboard-linux-$ARCH 2>&1
     mv -f $TEMP_DIR/dashboard-linux-$ARCH $TEMP_DIR/app >/dev/null 2>&1
   fi

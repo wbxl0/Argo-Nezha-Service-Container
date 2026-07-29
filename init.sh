@@ -346,6 +346,8 @@ EOF
   # 如为 token 时
   elif [[ "$ARGO_AUTH" =~ ^ey[A-Z0-9a-z=]{120,250}$ ]]; then
     ARGO_RUN="cloudflared tunnel --edge-ip-version auto --protocol http2 run --token ${ARGO_AUTH}"
+  else
+    error "The ARGO_AUTH variable is neither a valid tunnel JSON nor token, please check."
   fi
 
   # 生成自签署SSL证书
@@ -501,7 +503,7 @@ XIEYI2='vm'
 CF_IP=${CF_IP:-'ip.sb'}
 SUB_NAME=${SUB_NAME:-'nezha'}
 up_url="${XIEYI}ess://${UUID}@${CF_IP}:443?path=%2F${XIEYI}s%3Fed%3D2048&security=tls&encryption=none&host=${ARGO_DOMAIN}&type=ws&sni=${ARGO_DOMAIN}#${country_code}-${SUB_NAME}-${XIEYI}"
-VM_SS="{ \"v\": \"2\", \"ps\": \"${country_code}-${SUB_NAME}-${XIEYI2}\", \"add\": \"${CF_IP}\", \"port\": \"443\", \"id\": \"${UUID}\", \"aid\": \"0\", \"scy\": \"none\", \"net\": \"ws\", \"type\": \"none\", \"host\": \"${ARGO_DOMAIN}\", \"path\": \"/vms?ed=2048\", \"tls\": \"tls\", \"sni\": \"${ARGO_DOMAIN}\", \"alpn\": \"\", \"fp\": \"randomized\", \"allowlnsecure\": \"flase\"}"
+VM_SS="{ \"v\": \"2\", \"ps\": \"${country_code}-${SUB_NAME}-${XIEYI2}\", \"add\": \"${CF_IP}\", \"port\": \"443\", \"id\": \"${UUID}\", \"aid\": \"0\", \"scy\": \"none\", \"net\": \"ws\", \"type\": \"none\", \"host\": \"${ARGO_DOMAIN}\", \"path\": \"/vms?ed=2048\", \"tls\": \"tls\", \"sni\": \"${ARGO_DOMAIN}\", \"alpn\": \"\", \"fp\": \"randomized\", \"allowInsecure\": false}"
 if command -v base64 >/dev/null 2>&1; then
   vm_url="${XIEYI2}ess://$(echo -n "$VM_SS" | base64 -w 0)"
 fi

@@ -1,0 +1,108 @@
+<!--
+  Nezha /dashboard server list: keep the operation column visible.
+  v1: paste this whole block into Settings -> Custom Codes Dashboard.
+  v0: use the same CSS in the dashboard theme/custom CSS injection point.
+-->
+<style>
+/* Nezha v1 server management table (the script below adds this class only on /dashboard) */
+table.wb-server-management-table th:last-child,
+table.wb-server-management-table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 20;
+  min-width: 9rem;
+  white-space: nowrap;
+  background: hsl(var(--background));
+  box-shadow: -0.5rem 0 0.75rem -0.75rem hsl(var(--foreground) / 0.8);
+}
+
+table.wb-server-management-table tbody tr:hover td:last-child,
+table.wb-server-management-table tbody tr[data-state="selected"] td:last-child {
+  background: hsl(var(--muted) / 0.5);
+}
+
+table.wb-server-management-table th:nth-child(1),
+table.wb-server-management-table td:nth-child(1),
+table.wb-server-management-table th:nth-child(2),
+table.wb-server-management-table td:nth-child(2) {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+table.wb-server-management-table td:last-child > *,
+table.wb-server-management-table td:last-child [role="group"] {
+  flex-shrink: 0;
+}
+
+/* Hide only the backend server table's Group column. */
+table.wb-server-management-table .wb-server-group-column {
+  display: none;
+}
+
+/* Nezha v0 Semantic UI server table */
+table.ui.basic.table th:last-child,
+table.ui.basic.table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 20;
+  min-width: 9rem;
+  white-space: nowrap;
+  background: var(--background, #fff);
+  box-shadow: -0.5rem 0 0.75rem -0.75rem rgba(0, 0, 0, 0.45);
+}
+
+table.ui.basic.table tr:hover td:last-child {
+  background: var(--hover-background, var(--background, #fff));
+}
+
+table.ui.basic.table td:nth-child(1),
+table.ui.basic.table td:nth-child(2) {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>
+<script>
+(() => {
+  const markerClass = "wb-server-management-table"
+
+  const markServerTable = () => {
+    if (window.location.pathname !== "/dashboard") return
+
+    document.querySelectorAll("table").forEach((table) => {
+      const headers = Array.from(table.querySelectorAll("thead th"))
+      const lastHeader = headers.at(-1)
+      if (!lastHeader) return
+
+      const headerText = lastHeader.textContent?.trim().toLowerCase() || ""
+      const hasActionButtons = Boolean(
+        table.querySelector("tbody td:last-child button, tbody td:last-child [role='button']"),
+      )
+
+      if (hasActionButtons && ["actions", "action", "操作", "管理"].includes(headerText)) {
+        table.classList.add(markerClass)
+
+        headers.forEach((header, index) => {
+          const text = header.textContent?.trim().toLowerCase() || ""
+          if (["group", "groups", "分组", "服务器分组"].includes(text)) {
+            header.classList.add("wb-server-group-column")
+            table.querySelectorAll("tbody tr").forEach((row) => {
+              row.children[index]?.classList.add("wb-server-group-column")
+            })
+          }
+        })
+      }
+    })
+  }
+
+  markServerTable()
+  new MutationObserver(markServerTable).observe(document.body, {
+    childList: true,
+    subtree: true,
+  })
+  window.addEventListener("popstate", markServerTable)
+})()
+</script>

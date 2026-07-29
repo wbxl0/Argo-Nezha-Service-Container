@@ -109,7 +109,7 @@ if [ "$1" = a ]; then
 elif [ "$1" = f ]; then
   [[ "$ONLINE" =~ tar\.gz$ ]] && FILE="$ONLINE" || exit
 elif [[ "$1" =~ tar\.gz$ ]]; then
-  [[ "$FILE" =~ http.*/.*tar.gz ]] && FILE=$(awk -F '/' '{print $NF}' <<< $FILE) || FILE="$1"
+  [[ "$1" =~ ^https?://.*/[^/]+\.tar\.gz$ ]] && FILE=$(awk -F '/' '{print $NF}' <<< "$1") || FILE="$1"
 elif [ -z "$1" ]; then
   BACKUP_FILE_LIST=($(wget -qO- --header="Authorization: token $GH_PAT" https://api.github.com/repos/$GH_BACKUP_USER/$GH_REPO/contents/ | awk -F '"' '/"path".*tar.gz/{print $4}' | sort -r))
   until [[ "$CHOOSE" =~ ^[1-${#BACKUP_FILE_LIST[@]}]$ ]]; do
@@ -145,7 +145,7 @@ if [ -e $TEMP_DIR/backup.tar.gz ]; then
 
   if [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
     # 还原面板配置的最新信息
-    sed -i "s@HTTPPort:.*@$CONFIG_HTTPPORT@; s@Language:.*@$CONFIG_LANGUAGE@; s@^GRPCPort:.*@$CONFIG_GRPCPORT@; s@gGRPCHost:.*@I$CONFIG_GRPCHOST@; s@ProxyGRPCPort:.*@$CONFIG_PROXYGRPCPORT@; s@Type:.*@$CONFIG_TYPE@; s@Admin:.*@$CONFIG_ADMIN@; s@ClientID:.*@$CONFIG_CLIENTID@; s@ClientSecret:.*@$CONFIG_CLIENTSECRET@I" ${TEMP_DIR}/${FILE_PATH}data/config.yaml
+    sed -i "s@HTTPPort:.*@$CONFIG_HTTPPORT@; s@Language:.*@$CONFIG_LANGUAGE@; s@^GRPCPort:.*@$CONFIG_GRPCPORT@; s@^GRPCHost:.*@$CONFIG_GRPCHOST@; s@ProxyGRPCPort:.*@$CONFIG_PROXYGRPCPORT@; s@Type:.*@$CONFIG_TYPE@; s@Admin:.*@$CONFIG_ADMIN@; s@ClientID:.*@$CONFIG_CLIENTID@; s@ClientSecret:.*@$CONFIG_CLIENTSECRET@I" ${TEMP_DIR}/${FILE_PATH}data/config.yaml
 
     # 逻辑是安装首次使用备份文件里的主题信息，之后使用本地最新的主题信息和 MaxTCPPingValue, AvgPingCount
     [[ -n "$CONFIG_BRAND" && -n "$CONFIG_COOKIENAME" && -n "$CONFIG_THEME" ]] &&
