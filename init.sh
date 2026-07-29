@@ -175,7 +175,10 @@ EOF
   
   # 下载需要的应用
   if [[ -z "$DASHBOARD_VERSION" || "$DASHBOARD_VERSION" =~ [1-2]\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
-    if [[ "$DASHBOARD_VERSION" =~ [1-2]\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
+    if [[ "$DASHBOARD_VERSION" =~ 2\.2\.10$ && "$ARCH" =~ ^(amd64|arm64)$ ]]; then
+      DASHBOARD_LATEST=v2.2.10
+      wget -O /tmp/dashboard.zip "https://github.com/wbxl0/Argo-Nezha-Service-Container/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip"
+    elif [[ "$DASHBOARD_VERSION" =~ [1-2]\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
       DASHBOARD_LATEST=$(sed 's/v//; s/^/v&/' <<< "$DASHBOARD_VERSION")
       wget -O /tmp/dashboard.zip ${GH_PROXY}https://github.com/naiba/nezha/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip
     else

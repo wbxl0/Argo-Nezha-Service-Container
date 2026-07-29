@@ -76,17 +76,17 @@ bash <(wget -qO- https://raw.githubusercontent.com/wbxl0/Argo-Nezha-Service-Cont
   | 使用备份，[点击前往备份教程](https://github.com/wbxl0/Argo-Nezha-Service-Container?tab=readme-ov-file#%E6%89%8B%E5%8A%A8%E5%A4%87%E4%BB%BD%E6%95%B0%E6%8D%AE) | 有的容器重启会丢失数据，需要使用备份，需要 `GH_USER`或`GH_BACKUP_USER`、`GH_REPO`、`GH_EMAIL`、`GH_PAT` 这4个变量有值 |
   | 注意自动还原 | 容器在修改环境变量后会重新部署，注意备份库会自动还原备份 |
   | 使用本地ssh，[点击前往ssh教程](https://github.com/wbxl0/Argo-Nezha-Service-Container?tab=readme-ov-file#ssh-%E6%8E%A5%E5%85%A5) | 需要 `GH_CLIENTID`、`GH_CLIENTSECRET` 这2个变量有值 |
-  | 后台服务器列表的删除按钮被长 ID 或名称挤出屏幕 | 使用 `template/dashboard-server-actions-sticky.html` 中的样式。v1 将完整内容追加到“设置 → 后台自定义代码”，不要覆盖已有自定义代码；保存后刷新 `/dashboard`。删除该段样式即可回滚 |
+  | 后台服务器列表的删除按钮被长 ID 或名称挤出屏幕 | `DASHBOARD_VERSION=v2.2.10` 使用本仓库编译的 Dashboard：源码中移除后台分组列并固定操作列，不需要设置后台自定义代码 |
 
-### 固定后台服务器列表的操作列
+### v2.2.10 后台服务器列表源码修复
 
-`template/dashboard-server-actions-sticky.html` 会隐藏后台服务器管理表格的“分组/Group”列、固定最后一个操作列，并截断过长的 ID 和服务器名称，使编辑、菜单和删除按钮在横向滚动时保持可见。该隐藏只作用于后台 `/dashboard` 服务器表格，前台服务器分组仍正常显示。
+本仓库会基于 Nezha Dashboard `v2.2.10` 对应的 admin-frontend `v2.2.5` 重新编译管理前端和 Dashboard 二进制：
 
-- **Nezha v1/v2**：复制文件全部内容，追加到“设置 → 后台自定义代码（Custom Codes Dashboard）”后保存并刷新页面。适用于表头包含“分组”和“操作”的新版服务器表格。
-- **Nezha v0**：将文件中的 `<style>...</style>` 加入当前后台主题或自定义 CSS 注入位置；不同 v0 主题的注入入口可能不同。
-- **保留现有配置**：如果后台自定义代码已有内容，只追加此样式，不要整段覆盖。
-- **回滚**：删除新增的 `<style>...</style>` 并保存即可。
-- **兼容性**：该修复只修改浏览器端布局，不修改 SQLite、服务器数据、备份归档结构、`README.md` 还原触发协议、`dbfile` 或自动备份/还原脚本。
+- 从后台服务器列表源码中删除“分组/Group”列，前台分组和分组数据保持不变；
+- 将最后一个操作列固定在表格右侧，长 ID 或名称不再把删除按钮推到屏幕外；
+- Docker 设置 `DASHBOARD_VERSION=v2.2.10` 时会下载本仓库 Release 中的修复版 Dashboard；
+- `patches/admin-frontend-v2.2.5-server.patch` 是源码补丁，`build-dashboard.sh` 负责可重复构建；
+- 该修改不依赖 `custom_code_dashboard`，也不修改 SQLite、备份归档结构、`README.md` 还原触发协议、`dbfile` 或自动备份/还原的数据格式。
 
 * * *
 <br>
