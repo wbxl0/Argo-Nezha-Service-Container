@@ -1,6 +1,6 @@
-# Argo-Nezha-Service-Container 兼容 v0 和 v1
+# Argo-Nezha-Service-Container 兼容 v0、v1 和 v2
 
-- 本项目**兼容了nezha的v0和v1版本**，基于fscarmen大佬的 [Argo-Nezha-Service-Container](https://github.com/fscarmen2/Argo-Nezha-Service-Container) 修改。
+- 本项目**兼容 nezha 的 v0、v1 和 v2 版本**，基于fscarmen大佬的 [Argo-Nezha-Service-Container](https://github.com/fscarmen2/Argo-Nezha-Service-Container) 修改。
 
 - docker版本还结合了dsadsadsss大佬的 [Docker-for-Nezha-Argo-server-v0.x](https://github.com/dsadsadsss/Docker-for-Nezha-Argo-server-v0.x) 。
 
@@ -53,7 +53,7 @@ docker镜像： `mikehand888/argo-nezha:latest` ， 支持 amd64 和 arm64 架�
   | ARGO_AUTH           | 必填 | Json: 从 https://fscarmen.cloudflare.now.cc 获取的 Argo Json<br> Token: 从 Cloudflare 官网获取 |
   | ARGO_DOMAIN         | 必填 | Argo 域名 |
   | NO_AUTO_RENEW       | 否 | 默认不需要该变量，即每天定时同步在线最新的备份和还原脚本。如不需要该功能，设置此变量为 `1` |
-  | DASHBOARD_VERSION   | 否 | 指定面板的版本。`v0.00.00` 的格式和 `v1.00.00` 的格式，填写了将会把版本固定在所填版本。不填则是最新的v1面板 |
+  | DASHBOARD_VERSION   | 否 | 指定面板版本，支持 `v0.00.00`、`v1.00.00`、`v2.00.00` 格式。填写后固定版本；`v2.2.10` 使用本仓库源码修复版（amd64/arm64） |
   | AGENT_VERSION       | 否 | 指定探针的版本。`v0.00.00` 的格式和 `v1.00.00` 的格式，填写了将会把版本固定在所填版本。不填有两种情况：对于v1面板是保持最新的v1探针；对于v0面板是v0.20.5版本 |
   | PRO_PORT            | 否 | 容器平台的开放端口，不填默认为80。如果容器开放的端口不为80且argo隧道使用的token，则修改此处并手动修改隧道设置里对应的端口 |
   | UUID                | 否 | 填写会有节点，在日志查看base64 |
@@ -84,7 +84,8 @@ bash <(wget -qO- https://raw.githubusercontent.com/wbxl0/Argo-Nezha-Service-Cont
 
 - 从后台服务器列表源码中删除“分组/Group”列，前台分组和分组数据保持不变；
 - 将最后一个操作列固定在表格右侧，长 ID 或名称不再把删除按钮推到屏幕外；
-- Docker 设置 `DASHBOARD_VERSION=v2.2.10` 时会下载本仓库 Release 中的修复版 Dashboard；
+- Docker 或 VPS 脚本设置 `DASHBOARD_VERSION=v2.2.10` 时，会下载本仓库 Release 中的修复版 Dashboard（amd64/arm64）；
+- 固定为 `v2.2.10` 后，定时备份脚本及手动强制更新仍使用本仓库修复版，不会覆盖回官方前端；
 - `patches/admin-frontend-v2.2.5-server.patch` 是源码补丁，`build-dashboard.sh` 负责可重复构建；
 - 该修改不依赖 `custom_code_dashboard`，也不修改 SQLite、备份归档结构、`README.md` 还原触发协议、`dbfile` 或自动备份/还原的数据格式。
 

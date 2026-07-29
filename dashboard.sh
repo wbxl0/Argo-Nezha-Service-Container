@@ -284,7 +284,11 @@ dashboard_variables() {
     { wget -qO $TEMP_DIR/dashboard.zip ${GH_PROXY}https://github.com/nezhahq/nezha/releases/latest/download/dashboard-linux-$ARCH.zip >/dev/null 2>&1; }&
   elif [[ "$DASHBOARD_VERSION" =~ [0-2]{1}\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
     DASHBOARD_LATEST=$(sed 's/[A-Za-z]//; s/^/v&/' <<< "$DASHBOARD_VERSION")
-    { wget -qO $TEMP_DIR/dashboard.zip ${GH_PROXY}https://github.com/naiba/nezha/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip >/dev/null 2>&1; }&
+    if [[ "$DASHBOARD_LATEST" = 'v2.2.10' && "$ARCH" =~ ^(amd64|arm64)$ ]]; then
+      { wget -qO $TEMP_DIR/dashboard.zip "https://github.com/wbxl0/Argo-Nezha-Service-Container/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip" >/dev/null 2>&1; }&
+    else
+      { wget -qO $TEMP_DIR/dashboard.zip ${GH_PROXY}https://github.com/naiba/nezha/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip >/dev/null 2>&1; }&
+    fi
   else
     error "\n $(text 42) \n"
   fi

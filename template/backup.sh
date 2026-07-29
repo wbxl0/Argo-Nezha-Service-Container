@@ -99,7 +99,11 @@ if [[ "${DASHBOARD_UPDATE}${CLOUDFLARED_UPDATE}${IS_BACKUP}${FORCE_UPDATE}" =~ t
   # 更新面板主程序
   if [[ "${DASHBOARD_UPDATE}${FORCE_UPDATE}" =~ 'true' ]]; then
     hint "\n Renew dashboard app to $DASHBOARD_LATEST \n"
-    wget -O /tmp/dashboard.zip ${GH_PROXY}https://github.com/naiba/nezha/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip
+    if [[ "$DASHBOARD_LATEST" = 'v2.2.10' && "$ARCH" =~ ^(amd64|arm64)$ ]]; then
+      wget -O /tmp/dashboard.zip "https://github.com/wbxl0/Argo-Nezha-Service-Container/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip"
+    else
+      wget -O /tmp/dashboard.zip ${GH_PROXY}https://github.com/naiba/nezha/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip
+    fi
     unzip -o /tmp/dashboard.zip -d /tmp
     chmod +x /tmp/dashboard-linux-$ARCH
     if [ -s /tmp/dashboard-linux-$ARCH ]; then
