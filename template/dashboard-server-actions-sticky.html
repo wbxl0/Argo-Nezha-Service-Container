@@ -1,10 +1,10 @@
 <!--
-  Nezha /dashboard server list: keep the operation column visible.
-  v1: paste this whole block into Settings -> Custom Codes Dashboard.
-  v0: use the same CSS in the dashboard theme/custom CSS injection point.
+  Nezha /dashboard server list: hide Group and keep the operation column visible.
+  v1/v2: paste this whole block into Settings -> Custom Codes Dashboard.
+  v0: use the CSS in the dashboard theme/custom CSS injection point.
 -->
 <style>
-/* Nezha v1 server management table (the script below adds this class only on /dashboard) */
+/* Nezha v1/v2 server management table (the script below adds this class only on /dashboard) */
 table.wb-server-management-table th:last-child,
 table.wb-server-management-table td:last-child {
   position: sticky;
@@ -41,6 +41,14 @@ table.wb-server-management-table .wb-server-group-column {
   display: none;
 }
 
+/* Fallback for v2 when custom-code scripts are blocked: the server table has 12 columns. */
+@supports selector(table:has(th)) {
+  table:has(> thead > tr > th:nth-child(12)) > thead > tr > th:nth-child(4),
+  table:has(> thead > tr > th:nth-child(12)) > tbody > tr > td:nth-child(4) {
+    display: none;
+  }
+}
+
 /* Nezha v0 Semantic UI server table */
 table.ui.basic.table th:last-child,
 table.ui.basic.table td:last-child {
@@ -69,40 +77,46 @@ table.ui.basic.table td:nth-child(2) {
 (() => {
   const markerClass = "wb-server-management-table"
 
+  const normalize = (value) => value?.replace(/\s+/g, "").trim().toLowerCase() || ""
+  const actionHeaders = new Set(["actions", "action", "操作", "管理"])
+  const groupHeaders = new Set(["group", "groups", "分组", "服务器分组"])
+
   const markServerTable = () => {
-    if (window.location.pathname !== "/dashboard") return
+    if (!window.location.pathname.startsWith("/dashboard")) return
 
     document.querySelectorAll("table").forEach((table) => {
-      const headers = Array.from(table.querySelectorAll("thead th"))
+      const headerRow = table.querySelector("thead tr") || table.querySelector("tr:has(th)")
+      if (!headerRow) return
+
+      const headers = Array.from(headerRow.children).filter((cell) => cell.tagName === "TH")
       const lastHeader = headers.at(-1)
-      if (!lastHeader) return
+      if (!lastHeader || !actionHeaders.has(normalize(lastHeader.textContent))) return
 
-      const headerText = lastHeader.textContent?.trim().toLowerCase() || ""
-      const hasActionButtons = Boolean(
-        table.querySelector("tbody td:last-child button, tbody td:last-child [role='button']"),
-      )
+      table.classList.add(markerClass)
 
-      if (hasActionButtons && ["actions", "action", "操作", "管理"].includes(headerText)) {
-        table.classList.add(markerClass)
+      headers.forEach((header, index) => {
+        if (!groupHeaders.has(normalize(header.textContent))) return
 
-        headers.forEach((header, index) => {
-          const text = header.textContent?.trim().toLowerCase() || ""
-          if (["group", "groups", "分组", "服务器分组"].includes(text)) {
-            header.classList.add("wb-server-group-column")
-            table.querySelectorAll("tbody tr").forEach((row) => {
-              row.children[index]?.classList.add("wb-server-group-column")
-            })
-          }
+        header.classList.add("wb-server-group-column")
+        table.querySelectorAll("tr").forEach((row) => {
+          const cell = row.children[index]
+          if (cell) cell.classList.add("wb-server-group-column")
         })
-      }
+      })
     })
   }
 
   markServerTable()
-  new MutationObserver(markServerTable).observe(document.body, {
-    childList: true,
-    subtree: true,
-  })
-  window.addEventListener("popstate", markServerTable)
+  const start = () => {
+    markServerTable()
+    new MutationObserver(markServerTable).observe(document.body, {
+      childList: true,
+      subtree: true,
+    })
+    window.addEventListener("popstate", markServerTable)
+  }
+
+  if (document.body) start()
+  else window.addEventListener("DOMContentLoaded", start, { once: true })
 })()
 </script>

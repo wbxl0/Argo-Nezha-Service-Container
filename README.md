@@ -82,7 +82,7 @@ bash <(wget -qO- https://raw.githubusercontent.com/wbxl0/Argo-Nezha-Service-Cont
 
 `template/dashboard-server-actions-sticky.html` 会隐藏后台服务器管理表格的“分组/Group”列、固定最后一个操作列，并截断过长的 ID 和服务器名称，使编辑、菜单和删除按钮在横向滚动时保持可见。该隐藏只作用于后台 `/dashboard` 服务器表格，前台服务器分组仍正常显示。
 
-- **Nezha v1**：复制文件全部内容，追加到“设置 → 后台自定义代码（Custom Codes Dashboard）”后保存并刷新页面。
+- **Nezha v1/v2**：复制文件全部内容，追加到“设置 → 后台自定义代码（Custom Codes Dashboard）”后保存并刷新页面。适用于表头包含“分组”和“操作”的新版服务器表格。
 - **Nezha v0**：将文件中的 `<style>...</style>` 加入当前后台主题或自定义 CSS 注入位置；不同 v0 主题的注入入口可能不同。
 - **保留现有配置**：如果后台自定义代码已有内容，只追加此样式，不要整段覆盖。
 - **回滚**：删除新增的 `<style>...</style>` 并保存即可。
