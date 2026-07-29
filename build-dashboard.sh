@@ -29,6 +29,7 @@ esac
 command -v git >/dev/null || { echo "git is required." >&2; exit 1; }
 command -v npm >/dev/null || { echo "npm is required." >&2; exit 1; }
 command -v go >/dev/null || { echo "go is required." >&2; exit 1; }
+command -v swag >/dev/null || { echo "swag is required." >&2; exit 1; }
 
 ADMIN_DIR="$BUILD_DIR/admin-frontend"
 NEZHA_DIR="$BUILD_DIR/nezha"
@@ -47,6 +48,7 @@ git clone --depth 1 --branch "$DASHBOARD_VERSION" \
 (
   cd "$NEZHA_DIR"
   ./script/fetch-frontends.sh
+  swag init --pd -d cmd/dashboard -g main.go -o cmd/dashboard/docs
 )
 rm -rf "$NEZHA_DIR/cmd/dashboard/admin-dist"
 cp -a "$ADMIN_DIR/dist" "$NEZHA_DIR/cmd/dashboard/admin-dist"
