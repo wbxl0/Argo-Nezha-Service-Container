@@ -19,6 +19,7 @@ jobs:
         DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         DOCKERHUB_REPOSITORY: ${{ secrets.DOCKER_USERNAME }}/${{ secrets.DOCKER_REPO }}:${{ secrets.DOCKER_TAG || 'latest' }}
+        IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
 
       steps:
       - name: Checkout code

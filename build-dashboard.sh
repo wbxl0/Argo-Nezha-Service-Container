@@ -30,6 +30,10 @@ command -v git >/dev/null || { echo "git is required." >&2; exit 1; }
 command -v npm >/dev/null || { echo "npm is required." >&2; exit 1; }
 command -v go >/dev/null || { echo "go is required." >&2; exit 1; }
 command -v swag >/dev/null || { echo "swag is required." >&2; exit 1; }
+command -v curl >/dev/null || { echo "curl is required." >&2; exit 1; }
+command -v python3 >/dev/null || { echo "python3 is required." >&2; exit 1; }
+
+: "${IPINFO_TOKEN:?IPINFO_TOKEN is required to download the GeoIP country database.}"
 
 ADMIN_DIR="$BUILD_DIR/admin-frontend"
 NEZHA_DIR="$BUILD_DIR/nezha"
@@ -44,6 +48,26 @@ npm --prefix "$ADMIN_DIR" run build
 
 git clone --depth 1 --branch "$DASHBOARD_VERSION" \
   https://github.com/nezhahq/nezha.git "$NEZHA_DIR"
+
+GEOIP_DB="$NEZHA_DIR/pkg/geoip/geoip.db"
+GEOIP_URL="https://ipinfo.io/data/free/country.mmdb?token=${IPINFO_TOKEN}"
+rm -f "$GEOIP_DB"
+curl --fail --silent --show-error --location \
+  --retry 3 --retry-all-errors \
+  --output "$GEOIP_DB" "$GEOIP_URL"
+
+python3 - "$GEOIP_DB" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+data = path.read_bytes()
+if len(data) < 1024:
+    raise SystemExit(f"GeoIP database is unexpectedly small: {len(data)} bytes")
+if b"\xab\xcd\xefMaxMind.com" not in data[-131072:]:
+    raise SystemExit("Downloaded GeoIP file does not contain a MaxMind DB metadata marker")
+print(f"Validated GeoIP country database: {len(data)} bytes")
+PY
 
 (
   cd "$NEZHA_DIR"

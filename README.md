@@ -87,6 +87,7 @@ bash <(wget -qO- https://raw.githubusercontent.com/wbxl0/Argo-Nezha-Service-Cont
 - Docker 或 VPS 脚本设置 `DASHBOARD_VERSION=v2.2.10` 时，会下载本仓库 Release 中的修复版 Dashboard（amd64/arm64）；
 - 固定为 `v2.2.10` 后，定时备份脚本及手动强制更新仍使用本仓库修复版，不会覆盖回官方前端；
 - `patches/admin-frontend-v2.2.5-server.patch` 是源码补丁，`build-dashboard.sh` 负责可重复构建；
+- GitHub Actions 需要额外配置 `IPINFO_TOKEN` Secret，用于按 Nezha 官方流程下载 Country MMDB；缺少该数据库时前台服务器不会获得 `country_code`，国旗将无法显示；
 - 该修改不依赖 `custom_code_dashboard`，也不修改 SQLite、备份归档结构、`README.md` 还原触发协议、`dbfile` 或自动备份/还原的数据格式。
 
 * * *
