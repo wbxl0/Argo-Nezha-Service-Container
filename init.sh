@@ -61,45 +61,37 @@ if [ ! -s /etc/supervisor/conf.d/damon.conf ]; then
     chmod +x $WORK_DIR/grpcwebproxy
     GRPC_PROXY_RUN="$WORK_DIR/grpcwebproxy --server_tls_cert_file=$WORK_DIR/nezha.pem --server_tls_key_file=$WORK_DIR/nezha.key --server_http_tls_port=$GRPC_PROXY_PORT --backend_addr=localhost:$GRPC_PORT --backend_tls_noverify --server_http_max_read_timeout=300s --server_http_max_write_timeout=300s"
   elif [ "$REVERSE_PROXY_MODE" = 'nginx' ]; then
-    GRPC_PROXY_RUN='nginx -g "daemon off;"'
+    # 混合低内存模式：Nginx 仅代理 Web/WebSocket，Caddy 仅代理原生 gRPC。
+    # 避免 Nginx 在 Cloudflare Tunnel Public Hostname 链路中周期性重置双向 gRPC 流。
     [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]] && DASHBOARD_HTTP_PORT=$WEB_PORT || DASHBOARD_HTTP_PORT=$GRPC_PORT
-    cat > /etc/nginx/nginx.conf  << EOF
+    if [[ "$CADDY_VERSION" =~ [0-9]{1}\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
+      CADDY_LATEST=$(sed 's/[A-Za-z]//' <<< "$CADDY_VERSION")
+    else
+      CADDY_LATEST=2.9.1
+    fi
+    wget -c ${GH_PROXY}https://github.com/caddyserver/caddy/releases/download/v${CADDY_LATEST}/caddy_${CADDY_LATEST}_linux_${ARCH}.tar.gz -qO- | tar xz -C $WORK_DIR caddy
+    GRPC_PROXY_RUN="env GOMEMLIMIT=128MiB $WORK_DIR/caddy run --config $WORK_DIR/Caddyfile"
+    WEB_PROXY_RUN='nginx -g "daemon off;"'
+    cat > $WORK_DIR/Caddyfile << EOF
+{
+    admin off
+    auto_https off
+}
+
+https://:$GRPC_PROXY_PORT {
+    reverse_proxy h2c://127.0.0.1:$GRPC_PORT
+    tls $WORK_DIR/nezha.pem $WORK_DIR/nezha.key
+}
+EOF
+    cat > /etc/nginx/nginx.conf << EOF
 user www-data;
-worker_processes auto;
+worker_processes 1;
 pid /run/nginx.pid;
 include /etc/nginx/modules-enabled/*.conf;
 events {
-        worker_connections 768;
-        # multi_accept on;
+  worker_connections 768;
 }
 http {
-  upstream grpcservers {
-    server localhost:$GRPC_PORT;
-    keepalive 1024;
-  }
-  server {
-    listen 127.0.0.1:$GRPC_PROXY_PORT ssl http2;
-    server_name $ARGO_DOMAIN;
-    ssl_certificate          $WORK_DIR/nezha.pem;
-    ssl_certificate_key      $WORK_DIR/nezha.key;
-    underscores_in_headers on;
-    keepalive_time 24h;
-    keepalive_requests 100000;
-    keepalive_timeout 120s;
-    location ^~ /proto.NezhaService/ {
-      grpc_set_header Host \$host;
-      grpc_set_header nz-realip \$http_cf_connecting_ip;
-      grpc_read_timeout 24h;
-      grpc_send_timeout 24h;
-      grpc_socket_keepalive on;
-      client_max_body_size 10m;
-      grpc_buffer_size 4m;
-      grpc_pass grpc://grpcservers;
-    }
-    access_log  /dev/null;
-    error_log   /dev/stderr warn;
-  }
-
   map \$http_upgrade \$connection_upgrade {
     default upgrade;
     '' close;
@@ -478,6 +470,8 @@ pidfile=/run/supervisord.pid
 command=$GRPC_PROXY_RUN
 autostart=true
 autorestart=true
+stopasgroup=true
+killasgroup=true
 stderr_logfile=/dev/null
 stdout_logfile=/dev/null
 
@@ -509,6 +503,21 @@ redirect_stderr=true
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 EOF
+if [ -n "$WEB_PROXY_RUN" ]; then
+    cat >> /etc/supervisor/conf.d/damon.conf << EOF
+
+[program:webproxy]
+command=$WEB_PROXY_RUN
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+EOF
+fi
 if [ -n "$UUID" ] && [ "$UUID" != "0" ]; then
     cat >> /etc/supervisor/conf.d/damon.conf << EOF
 
