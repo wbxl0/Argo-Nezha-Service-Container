@@ -49,14 +49,39 @@ jobs:
         run: bash build-dashboard.sh
 
       - name: Publish patched Dashboard release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v2.2.10
-          name: Patched Nezha Dashboard v2.2.10
-          files: |
-            dist/dashboard-linux-amd64.zip
-            dist/dashboard-linux-arm64.zip
-          make_latest: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="v2.2.10"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" \
+              --target "$GITHUB_SHA" \
+              --title "Patched Nezha Dashboard v2.2.10" \
+              --notes "Patched Nezha Dashboard v2.2.10"
+          fi
+
+          upload_asset() {
+            local file="$1"
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              if gh release upload "$tag" "$file" --clobber; then
+                return 0
+              fi
+              if [ "$attempt" -lt 5 ]; then
+                sleep $((attempt * 10))
+              fi
+            done
+            echo "Failed to upload $file after 5 attempts" >&2
+            return 1
+          }
+
+          upload_asset dist/dashboard-linux-amd64.zip
+          upload_asset dist/dashboard-linux-arm64.zip
+
+          assets="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+          grep -Fxq 'dashboard-linux-amd64.zip' <<< "$assets"
+          grep -Fxq 'dashboard-linux-arm64.zip' <<< "$assets"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3.0.0
