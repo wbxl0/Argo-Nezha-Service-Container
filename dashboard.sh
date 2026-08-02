@@ -410,14 +410,21 @@ http {
     ssl_certificate          $WORK_DIR/nezha.pem;
     ssl_certificate_key      $WORK_DIR/nezha.key;
     underscores_in_headers on;
-    location / {
-      grpc_read_timeout 300s;
-      grpc_send_timeout 300s;
+    keepalive_time 24h;
+    keepalive_requests 100000;
+    keepalive_timeout 120s;
+    location ^~ /proto.NezhaService/ {
+      grpc_set_header Host \$host;
+      grpc_set_header nz-realip \$http_cf_connecting_ip;
+      grpc_read_timeout 24h;
+      grpc_send_timeout 24h;
       grpc_socket_keepalive on;
+      client_max_body_size 10m;
+      grpc_buffer_size 4m;
       grpc_pass grpc://grpcservers;
     }
     access_log  /dev/null;
-    error_log   /dev/null;
+    error_log   /dev/stderr warn;
   }
 }
 EOF
