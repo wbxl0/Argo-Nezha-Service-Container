@@ -62,6 +62,7 @@ if [ ! -s /etc/supervisor/conf.d/damon.conf ]; then
     GRPC_PROXY_RUN="$WORK_DIR/grpcwebproxy --server_tls_cert_file=$WORK_DIR/nezha.pem --server_tls_key_file=$WORK_DIR/nezha.key --server_http_tls_port=$GRPC_PROXY_PORT --backend_addr=localhost:$GRPC_PORT --backend_tls_noverify --server_http_max_read_timeout=300s --server_http_max_write_timeout=300s"
   elif [ "$REVERSE_PROXY_MODE" = 'nginx' ]; then
     GRPC_PROXY_RUN='nginx -g "daemon off;"'
+    [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]] && DASHBOARD_HTTP_PORT=$WEB_PORT || DASHBOARD_HTTP_PORT=$GRPC_PORT
     cat > /etc/nginx/nginx.conf  << EOF
 user www-data;
 worker_processes auto;
@@ -90,6 +91,30 @@ http {
     }
     access_log  /dev/null;
     error_log   /dev/null;
+  }
+
+  map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    '' close;
+  }
+
+  server {
+    listen 127.0.0.1:$PRO_PORT;
+    server_name $ARGO_DOMAIN;
+    location / {
+      proxy_pass http://127.0.0.1:$DASHBOARD_HTTP_PORT;
+      proxy_http_version 1.1;
+      proxy_set_header Host \$host;
+      proxy_set_header X-Real-IP \$remote_addr;
+      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto \$scheme;
+      proxy_set_header Upgrade \$http_upgrade;
+      proxy_set_header Connection \$connection_upgrade;
+      proxy_read_timeout 3600s;
+      proxy_send_timeout 3600s;
+    }
+    access_log /dev/null;
+    error_log /dev/stderr warn;
   }
 }
 EOF
@@ -314,7 +339,7 @@ EOF
   # 判断 ARGO_AUTH 为 json 还是 token
   # 如为 json 将生成 argo.json 和 argo.yml 文件
   if [[ "$ARGO_AUTH" =~ TunnelSecret ]]; then
-    ARGO_RUN="cloudflared tunnel --edge-ip-version auto --config $WORK_DIR/argo.yml run"
+    ARGO_RUN="cloudflared tunnel --no-autoupdate --loglevel info --transport-loglevel warn --edge-ip-version auto --config $WORK_DIR/argo.yml run"
 
     echo "$ARGO_AUTH" > $WORK_DIR/argo.json
 
@@ -348,7 +373,7 @@ EOF
     fi
   # 如为 token 时
   elif [[ "$ARGO_AUTH" =~ ^ey[A-Z0-9a-z=]{120,250}$ ]]; then
-    ARGO_RUN="cloudflared tunnel --edge-ip-version auto --protocol http2 run --token ${ARGO_AUTH}"
+    ARGO_RUN="cloudflared tunnel --no-autoupdate --loglevel info --transport-loglevel warn --edge-ip-version auto --protocol http2 run --token ${ARGO_AUTH}"
   else
     error "The ARGO_AUTH variable is neither a valid tunnel JSON nor token, please check."
   fi
@@ -469,8 +494,13 @@ stdout_logfile_backups=2
 command=$WORK_DIR/$ARGO_RUN
 autostart=true
 autorestart=true
-stderr_logfile=/dev/null
-stdout_logfile=/dev/null
+startsecs=5
+startretries=20
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
 EOF
 if [ -n "$UUID" ] && [ "$UUID" != "0" ]; then
     cat >> /etc/supervisor/conf.d/damon.conf << EOF

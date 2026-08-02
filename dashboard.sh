@@ -523,7 +523,7 @@ EOF
   # 判断 ARGO_AUTH 为 json 还是 token
   # 如为 json 将生成 argo.json 和 argo.yml 文件
   if [ -n "$ARGO_JSON" ]; then
-    ARGO_RUN="${WORK_DIR}/cloudflared tunnel --edge-ip-version auto --config ${WORK_DIR}/argo.yml run"
+    ARGO_RUN="${WORK_DIR}/cloudflared tunnel --no-autoupdate --loglevel info --transport-loglevel warn --edge-ip-version auto --config ${WORK_DIR}/argo.yml run"
 
     echo "$ARGO_JSON" > ${WORK_DIR}/argo.json
 
@@ -546,7 +546,7 @@ EOF
 
   # 如为 token 时
   elif [ -n "$ARGO_TOKEN" ]; then
-    ARGO_RUN="${WORK_DIR}/cloudflared tunnel --edge-ip-version auto --protocol http2 run --token ${ARGO_TOKEN}"
+    ARGO_RUN="${WORK_DIR}/cloudflared tunnel --no-autoupdate --loglevel info --transport-loglevel warn --edge-ip-version auto --protocol http2 run --token ${ARGO_TOKEN}"
   fi
 
   # 生成应用启动停止脚本及进程守护
