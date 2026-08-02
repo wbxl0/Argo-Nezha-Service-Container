@@ -55,14 +55,20 @@ if [ ! -s /etc/supervisor/conf.d/damon.conf ]; then
     * ) error " $(text 2) "
   esac
 
-  # 用户选择使用 gRPC 反代方式: Nginx / Caddy / grpcwebproxy，默认为 Caddy；如需使用 grpcwebproxy，把 REVERSE_PROXY_MODE 的值设为 nginx 或 grpcwebproxy
+  # 反向代理模式：caddy（默认）、nginx（纯 Nginx）、hybrid（Nginx Web + Caddy gRPC）。
+  # 保留 grpcwebproxy 作为旧配置兼容模式。
+  REVERSE_PROXY_MODE=${REVERSE_PROXY_MODE:-caddy}
+  case "$REVERSE_PROXY_MODE" in
+    caddy|nginx|hybrid|grpcwebproxy) ;;
+    *) error "Unsupported REVERSE_PROXY_MODE: $REVERSE_PROXY_MODE (supported: caddy, nginx, hybrid, grpcwebproxy)." ;;
+  esac
+
   if [ "$REVERSE_PROXY_MODE" = 'grpcwebproxy' ]; then
     wget -c ${GH_PROXY}https://github.com/fscarmen2/Argo-Nezha-Service-Container/releases/download/grpcwebproxy/grpcwebproxy-linux-$ARCH.tar.gz -qO- | tar xz -C $WORK_DIR
     chmod +x $WORK_DIR/grpcwebproxy
     GRPC_PROXY_RUN="$WORK_DIR/grpcwebproxy --server_tls_cert_file=$WORK_DIR/nezha.pem --server_tls_key_file=$WORK_DIR/nezha.key --server_http_tls_port=$GRPC_PROXY_PORT --backend_addr=localhost:$GRPC_PORT --backend_tls_noverify --server_http_max_read_timeout=300s --server_http_max_write_timeout=300s"
-  elif [ "$REVERSE_PROXY_MODE" = 'nginx' ]; then
-    # 混合低内存模式：Nginx 仅代理 Web/WebSocket，Caddy 仅代理原生 gRPC。
-    # 避免 Nginx 在 Cloudflare Tunnel Public Hostname 链路中周期性重置双向 gRPC 流。
+  elif [ "$REVERSE_PROXY_MODE" = 'hybrid' ]; then
+    # 混合模式：Nginx 仅代理 Web/WebSocket，Caddy 仅代理原生 gRPC。
     [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]] && DASHBOARD_HTTP_PORT=$WEB_PORT || DASHBOARD_HTTP_PORT=$GRPC_PORT
     if [[ "$CADDY_VERSION" =~ [0-9]{1}\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
       CADDY_LATEST=$(sed 's/[A-Za-z]//' <<< "$CADDY_VERSION")
@@ -111,6 +117,69 @@ http {
       proxy_set_header Connection \$connection_upgrade;
       proxy_read_timeout 3600s;
       proxy_send_timeout 3600s;
+    }
+    access_log /dev/null;
+    error_log /dev/stderr warn;
+  }
+}
+EOF
+  elif [ "$REVERSE_PROXY_MODE" = 'nginx' ]; then
+    # 纯 Nginx 低内存模式：同一进程代理 Web/WebSocket 和原生 gRPC。
+    [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]] && DASHBOARD_HTTP_PORT=$WEB_PORT || DASHBOARD_HTTP_PORT=$GRPC_PORT
+    GRPC_PROXY_RUN='nginx -g "daemon off;"'
+    cat > /etc/nginx/nginx.conf << EOF
+user www-data;
+worker_processes 1;
+pid /run/nginx.pid;
+include /etc/nginx/modules-enabled/*.conf;
+events {
+  worker_connections 768;
+}
+http {
+  map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    '' close;
+  }
+  upstream grpcservers {
+    server 127.0.0.1:$GRPC_PORT;
+    keepalive 1024;
+  }
+  server {
+    listen 127.0.0.1:$PRO_PORT;
+    server_name $ARGO_DOMAIN;
+    location / {
+      proxy_pass http://127.0.0.1:$DASHBOARD_HTTP_PORT;
+      proxy_http_version 1.1;
+      proxy_set_header Host \$host;
+      proxy_set_header X-Real-IP \$remote_addr;
+      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto \$scheme;
+      proxy_set_header Upgrade \$http_upgrade;
+      proxy_set_header Connection \$connection_upgrade;
+      proxy_read_timeout 3600s;
+      proxy_send_timeout 3600s;
+    }
+    access_log /dev/null;
+    error_log /dev/stderr warn;
+  }
+  server {
+    listen 127.0.0.1:$GRPC_PROXY_PORT ssl http2;
+    server_name $ARGO_DOMAIN;
+    ssl_certificate $WORK_DIR/nezha.pem;
+    ssl_certificate_key $WORK_DIR/nezha.key;
+    underscores_in_headers on;
+    keepalive_time 24h;
+    keepalive_requests 100000;
+    keepalive_timeout 120s;
+    location ^~ /proto.NezhaService/ {
+      grpc_set_header Host \$host;
+      grpc_set_header nz-realip \$http_cf_connecting_ip;
+      grpc_read_timeout 24h;
+      grpc_send_timeout 24h;
+      grpc_socket_keepalive on;
+      client_max_body_size 10m;
+      grpc_buffer_size 4m;
+      grpc_pass grpc://grpcservers;
     }
     access_log /dev/null;
     error_log /dev/stderr warn;
@@ -335,10 +404,23 @@ EOF
     service ssh restart
   fi
 
+  # cloudflared 日志级别可通过变量控制。设为 fatal 可静默非致命的 CANCEL/context canceled；
+  # 排障时可临时设为 info，支持 debug、info、warn、error、fatal。
+  ARGO_LOG_LEVEL=${ARGO_LOG_LEVEL:-info}
+  ARGO_TRANSPORT_LOG_LEVEL=${ARGO_TRANSPORT_LOG_LEVEL:-warn}
+  case "$ARGO_LOG_LEVEL" in
+    debug|info|warn|error|fatal) ;;
+    *) error "Unsupported ARGO_LOG_LEVEL: $ARGO_LOG_LEVEL (supported: debug, info, warn, error, fatal)." ;;
+  esac
+  case "$ARGO_TRANSPORT_LOG_LEVEL" in
+    debug|info|warn|error|fatal) ;;
+    *) error "Unsupported ARGO_TRANSPORT_LOG_LEVEL: $ARGO_TRANSPORT_LOG_LEVEL (supported: debug, info, warn, error, fatal)." ;;
+  esac
+
   # 判断 ARGO_AUTH 为 json 还是 token
   # 如为 json 将生成 argo.json 和 argo.yml 文件
   if [[ "$ARGO_AUTH" =~ TunnelSecret ]]; then
-    ARGO_RUN="cloudflared tunnel --no-autoupdate --loglevel info --transport-loglevel warn --edge-ip-version auto --config $WORK_DIR/argo.yml run"
+    ARGO_RUN="cloudflared tunnel --no-autoupdate --loglevel $ARGO_LOG_LEVEL --transport-loglevel $ARGO_TRANSPORT_LOG_LEVEL --edge-ip-version auto --config $WORK_DIR/argo.yml run"
 
     echo "$ARGO_AUTH" > $WORK_DIR/argo.json
 
@@ -372,7 +454,7 @@ EOF
     fi
   # 如为 token 时
   elif [[ "$ARGO_AUTH" =~ ^ey[A-Z0-9a-z=]{120,250}$ ]]; then
-    ARGO_RUN="cloudflared tunnel --no-autoupdate --loglevel info --transport-loglevel warn --edge-ip-version auto --protocol http2 run --token ${ARGO_AUTH}"
+    ARGO_RUN="cloudflared tunnel --no-autoupdate --loglevel $ARGO_LOG_LEVEL --transport-loglevel $ARGO_TRANSPORT_LOG_LEVEL --edge-ip-version auto --protocol http2 run --token ${ARGO_AUTH}"
   else
     error "The ARGO_AUTH variable is neither a valid tunnel JSON nor token, please check."
   fi

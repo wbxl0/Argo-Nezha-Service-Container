@@ -316,12 +316,19 @@ dashboard_variables() {
   ARGO_DOMAIN=$(sed 's/[ ]*//g; s/:[ ]*//' <<< "$ARGO_DOMAIN")
   { certificate; }&
 
-  # # 用户选择使用 gRPC 反代方式: Nginx / Caddy / grpcwebproxy，默认为 Caddy
-  [ -z "$REVERSE_PROXY_MODE" ] && info "\n (7/14) $(text 38) \n" && reading " $(text 24) " REVERSE_PROXY_CHOOSE
-  case "$REVERSE_PROXY_CHOOSE" in
-    2 ) REVERSE_PROXY_MODE=nginx ;;
-    3 ) REVERSE_PROXY_MODE=grpcwebproxy ;;
-    * ) REVERSE_PROXY_MODE=caddy ;;
+  # 用户选择反向代理方式；也可预先设置 REVERSE_PROXY_MODE=caddy/nginx/hybrid。
+  if [ -z "$REVERSE_PROXY_MODE" ]; then
+    info "\n (7/14) $(text 38) \n"
+    reading " $(text 24) " REVERSE_PROXY_CHOOSE
+    case "$REVERSE_PROXY_CHOOSE" in
+      2 ) REVERSE_PROXY_MODE=nginx ;;
+      3 ) REVERSE_PROXY_MODE=grpcwebproxy ;;
+      * ) REVERSE_PROXY_MODE=caddy ;;
+    esac
+  fi
+  case "$REVERSE_PROXY_MODE" in
+    caddy|nginx|hybrid|grpcwebproxy) ;;
+    *) error "Unsupported REVERSE_PROXY_MODE: $REVERSE_PROXY_MODE (supported: caddy, nginx, hybrid, grpcwebproxy)." ;;
   esac
 
   if [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
@@ -387,7 +394,8 @@ EOF
 EOF
     fi
   
-  elif [ "$REVERSE_PROXY_MODE" = 'nginx' ]; then
+  elif [[ "$REVERSE_PROXY_MODE" = 'nginx' || "$REVERSE_PROXY_MODE" = 'hybrid' ]]; then
+    # VPS 安装路径中的 hybrid 暂与纯 Nginx 共用实现；Docker init.sh 提供独立的 Nginx Web + Caddy gRPC 混合模式。
     [ ! -x "$(type -p nginx)" ] && ${PACKAGE_INSTALL[int]} nginx
     GRPC_PROXY_RUN="nginx -c $WORK_DIR/nginx.conf"
     cat > $TEMP_DIR/nginx.conf  << EOF
@@ -459,7 +467,7 @@ EOF
   cp -r $TEMP_DIR/{app,cloudflared,nezha.*} $WORK_DIR
   case "$REVERSE_PROXY_MODE" in
     caddy ) cp -f $TEMP_DIR/caddy $TEMP_DIR/Caddyfile $WORK_DIR ;;
-    nginx ) cp -f $TEMP_DIR/nginx.conf $WORK_DIR ;;
+    nginx|hybrid ) cp -f $TEMP_DIR/nginx.conf $WORK_DIR ;;
     grpcwebproxy ) cp -f $TEMP_DIR/grpcwebproxy $WORK_DIR ;;
   esac
   rm -rf $TEMP_DIR
@@ -527,10 +535,22 @@ EOF
     fi
   fi
 
+  # cloudflared 日志级别可通过环境变量控制；设为 fatal 可静默非致命流取消日志。
+  ARGO_LOG_LEVEL=${ARGO_LOG_LEVEL:-info}
+  ARGO_TRANSPORT_LOG_LEVEL=${ARGO_TRANSPORT_LOG_LEVEL:-warn}
+  case "$ARGO_LOG_LEVEL" in
+    debug|info|warn|error|fatal) ;;
+    *) error "Unsupported ARGO_LOG_LEVEL: $ARGO_LOG_LEVEL (supported: debug, info, warn, error, fatal)." ;;
+  esac
+  case "$ARGO_TRANSPORT_LOG_LEVEL" in
+    debug|info|warn|error|fatal) ;;
+    *) error "Unsupported ARGO_TRANSPORT_LOG_LEVEL: $ARGO_TRANSPORT_LOG_LEVEL (supported: debug, info, warn, error, fatal)." ;;
+  esac
+
   # 判断 ARGO_AUTH 为 json 还是 token
   # 如为 json 将生成 argo.json 和 argo.yml 文件
   if [ -n "$ARGO_JSON" ]; then
-    ARGO_RUN="${WORK_DIR}/cloudflared tunnel --no-autoupdate --loglevel info --transport-loglevel warn --edge-ip-version auto --config ${WORK_DIR}/argo.yml run"
+    ARGO_RUN="${WORK_DIR}/cloudflared tunnel --no-autoupdate --loglevel $ARGO_LOG_LEVEL --transport-loglevel $ARGO_TRANSPORT_LOG_LEVEL --edge-ip-version auto --config ${WORK_DIR}/argo.yml run"
 
     echo "$ARGO_JSON" > ${WORK_DIR}/argo.json
 
@@ -553,7 +573,7 @@ EOF
 
   # 如为 token 时
   elif [ -n "$ARGO_TOKEN" ]; then
-    ARGO_RUN="${WORK_DIR}/cloudflared tunnel --no-autoupdate --loglevel info --transport-loglevel warn --edge-ip-version auto --protocol http2 run --token ${ARGO_TOKEN}"
+    ARGO_RUN="${WORK_DIR}/cloudflared tunnel --no-autoupdate --loglevel $ARGO_LOG_LEVEL --transport-loglevel $ARGO_TRANSPORT_LOG_LEVEL --edge-ip-version auto --protocol http2 run --token ${ARGO_TOKEN}"
   fi
 
   # 生成应用启动停止脚本及进程守护
