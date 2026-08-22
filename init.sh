@@ -265,11 +265,6 @@ site_name: "Nezha Probe"
 install_host: $ARGO_DOMAIN:$GRPC_PROXY_PORT
 location: Asia/Shanghai
 tls: true
-max_agent_conn: 2000
-grpc_max_concurrent_streams: 2000
-grpc_max_conn_age: 0
-grpc_keepalive_time: 10s
-grpc_keepalive_timeout: 5s
 tsdb:
   data_path: "data/tsdb"
 EOF
