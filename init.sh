@@ -450,6 +450,7 @@ pidfile=/run/supervisord.pid
 
 [program:grpcproxy]
 command=$GRPC_PROXY_RUN
+environment=GOMEMLIMIT="128MiB"
 autostart=true
 autorestart=true
 stderr_logfile=/dev/null
@@ -457,6 +458,7 @@ stdout_logfile=/dev/null
 
 [program:nezha]
 command=$WORK_DIR/app
+environment=GOMEMLIMIT="176MiB"
 autostart=true
 autorestart=true
 stderr_logfile=/dev/null
@@ -471,6 +473,7 @@ stdout_logfile=/dev/null
 
 [program:argo]
 command=$WORK_DIR/$ARGO_RUN
+environment=GOMEMLIMIT="96MiB"
 autostart=true
 autorestart=true
 stderr_logfile=/dev/null
