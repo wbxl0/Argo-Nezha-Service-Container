@@ -49,14 +49,6 @@ npm --prefix "$ADMIN_DIR" run build
 git clone --depth 1 --branch "$DASHBOARD_VERSION" \
   https://github.com/nezhahq/nezha.git "$NEZHA_DIR"
 
-# 升级 grpc-go：v2.2.10 锁定的 1.81.1 服务端在大规模 agent 场景下会周期性重置
-# gRPC 连接（批量掉线），最新 nezha 使用 1.83.0 无此问题
-(
-  cd "$NEZHA_DIR"
-  go get google.golang.org/grpc@v1.83.0
-  go mod tidy
-)
-
 GEOIP_DB="$NEZHA_DIR/pkg/geoip/geoip.db"
 GEOIP_URL="https://ipinfo.io/data/free/country.mmdb?token=${IPINFO_TOKEN}"
 rm -f "$GEOIP_DB"
@@ -81,6 +73,15 @@ PY
   cd "$NEZHA_DIR"
   ./script/fetch-frontends.sh
   swag init --pd -d cmd/dashboard -g main.go -o cmd/dashboard/docs
+)
+
+# 升级 grpc-go：v2.2.10 锁定的 1.81.1 服务端在大规模 agent 场景下会周期性重置
+# gRPC 连接（批量掉线），最新 nezha 使用的 1.83.0 已修复。必须在 swag 生成 docs
+# 包之后再执行，否则 go get 解析不到尚未生成的 docs 包。
+(
+  cd "$NEZHA_DIR"
+  go get google.golang.org/grpc@v1.83.0
+  go mod tidy
 )
 rm -rf "$NEZHA_DIR/cmd/dashboard/admin-dist"
 cp -a "$ADMIN_DIR/dist" "$NEZHA_DIR/cmd/dashboard/admin-dist"
