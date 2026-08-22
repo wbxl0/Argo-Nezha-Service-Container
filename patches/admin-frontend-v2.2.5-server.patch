@@ -1,0 +1,80 @@
+diff --git a/src/routes/server.tsx b/src/routes/server.tsx
+index ccfd600..ff0c2a2 100644
+--- a/src/routes/server.tsx
++++ b/src/routes/server.tsx
+@@ -26,7 +26,6 @@ import {
+     TableRow,
+ } from "@/components/ui/table"
+ import { IconButton } from "@/components/xui/icon-button"
+-import { useServer } from "@/hooks/useServer"
+ import { joinIP } from "@/lib/utils"
+ import { ModelServerTaskResponse, ModelServer as Server } from "@/types"
+ import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table"
+@@ -41,8 +40,6 @@ export default function ServerPage() {
+         revalidateOnFocus: false,
+         revalidateOnReconnect: false,
+     })
+-    const { serverGroups } = useServer()
+-
+     useEffect(() => {
+         if (error)
+             toast(t("Error"), {
+@@ -88,17 +85,6 @@ export default function ServerPage() {
+                 return <div className="max-w-24 whitespace-normal break-words">{s.name}</div>
+             },
+         },
+-        {
+-            header: t("Group"),
+-            accessorKey: "groups",
+-            accessorFn: (row) => {
+-                return (
+-                    serverGroups
+-                        ?.filter((sg) => sg.servers?.includes(row.id))
+-                        .map((sg) => sg.group.id) || []
+-                )
+-            },
+-        },
+         {
+             id: "owner",
+             header: t("Owner"),
+@@ -181,7 +167,7 @@ export default function ServerPage() {
+                 const s = row.original
+                 return (
+                     <ActionButtonGroup
+-                        className="flex gap-2"
++                        className="flex gap-2 shrink-0"
+                         delete={{ fn: deleteServer, id: s.id, mutate: mutate }}
+                     >
+                         <>
+@@ -288,7 +274,14 @@ export default function ServerPage() {
+                             <TableRow key={headerGroup.id}>
+                                 {headerGroup.headers.map((header) => {
+                                     return (
+-                                        <TableHead key={header.id} className="text-sm">
++                                        <TableHead
++                                            key={header.id}
++                                            className={
++                                                header.column.id === "actions"
++                                                    ? "sticky right-0 z-20 bg-background whitespace-nowrap"
++                                                    : "text-sm"
++                                            }
++                                        >
+                                             {header.isPlaceholder
+                                                 ? null
+                                                 : flexRender(
+@@ -315,7 +308,14 @@ export default function ServerPage() {
+                                     data-state={row.getIsSelected() && "selected"}
+                                 >
+                                     {row.getVisibleCells().map((cell) => (
+-                                        <TableCell key={cell.id} className="text-xsm">
++                                        <TableCell
++                                            key={cell.id}
++                                            className={
++                                                cell.column.id === "actions"
++                                                    ? "sticky right-0 z-10 bg-background whitespace-nowrap"
++                                                    : "text-xsm"
++                                            }
++                                        >
+                                             {flexRender(
+                                                 cell.column.columnDef.cell,
+                                                 cell.getContext(),
