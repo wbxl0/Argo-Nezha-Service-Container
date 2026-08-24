@@ -219,7 +219,7 @@ EOF
     # 只备份 data/ 目录下的 config.yaml 和 sqlite.db； resource/ 目录下名字有 custom 的自定义主题文件夹
     TIME=$(date "+%Y-%m-%d-%H:%M:%S")
     echo "↓↓↓↓↓↓↓↓↓↓ dashboard-$TIME.tar.gz list ↓↓↓↓↓↓↓↓↓↓"
-    [ -d "resource" ] && find resource/ -type d -name "*custom*" | tar czvf /tmp/dashboard-$TIME.tar.gz -T- data/ || tar czvf /tmp/dashboard-$TIME.tar.gz data/
+    [ -d "resource" ] && find resource/ -type d -name "*custom*" | tar czvf /tmp/dashboard-$TIME.tar.gz -T- --exclude=data/tsdb data/ || tar czvf /tmp/dashboard-$TIME.tar.gz --exclude=data/tsdb data/
     echo -e "↑↑↑↑↑↑↑↑↑↑ dashboard-$TIME.tar.gz list ↑↑↑↑↑↑↑↑↑↑\n\n"
 
     # 更新备份 Github 库：仅保留最近 $DAYS 个备份，其余随本次提交一同删除；全程通过 GitHub API，不克隆、不留历史
