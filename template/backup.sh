@@ -106,6 +106,9 @@ if [[ "${DASHBOARD_UPDATE}${CLOUDFLARED_UPDATE}${IS_BACKUP}${FORCE_UPDATE}" =~ t
     elif [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]] && [ "$(printf '%s\n%s' "$VERSION_NUM" "0.20.13" | sort -V | tail -n1)" = "$VERSION_NUM" ]; then
       # v0且版本 > 0.20.13：从 railzen/nezha-zero 下载
       wget -O /tmp/dashboard.zip ${GH_PROXY}https://github.com/railzen/nezha-zero/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip
+    elif [[ "$DASHBOARD_LATEST" = 'v2.2.10' && "$ARCH" =~ ^(amd64|arm64)$ ]]; then
+      # v2.2.10：从本仓库 workflow 构建的修复版 Dashboard 下载，与 init.sh 保持一致
+      wget -O /tmp/dashboard.zip "https://github.com/wbxl0/Argo-Nezha-Service-Container/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip"
     else
       # 版本 < 0.20.13或者v1：从 naiba/nezha 下载
       wget -O /tmp/dashboard.zip ${GH_PROXY}https://github.com/naiba/nezha/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip
