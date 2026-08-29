@@ -10,7 +10,7 @@ if [ ! -s /etc/supervisor/conf.d/damon.conf ]; then
   WEB_PORT=8080
   PRO_PORT=${PRO_PORT:-'80'}
   BACKUP_TIME=${BACKUP_TIME:-'0 4 * * *'}
-  BACKUP_NUM= ${BACKUP_NUM:-'5'}
+  BACKUP_NUM=${BACKUP_NUM:-'5'}
   CADDY_HTTP_PORT=2052
   WORK_DIR=/dashboard
 
@@ -104,7 +104,7 @@ EOF
     fi
     # CADDY_LATEST=$(wget -qO- "${GH_PROXY}https://api.github.com/repos/caddyserver/caddy/releases/latest" | awk -F [v\"] '/"tag_name"/{print $5}' || echo '2.9.1')
     wget -c ${GH_PROXY}https://github.com/caddyserver/caddy/releases/download/v${CADDY_LATEST}/caddy_${CADDY_LATEST}_linux_${ARCH}.tar.gz -qO- | tar xz -C $WORK_DIR caddy
-    GRPC_PROXY_RUN="$WORK_DIR/caddy run --config $WORK_DIR/Caddyfile --watch"
+    GRPC_PROXY_RUN="$WORK_DIR/caddy run --config $WORK_DIR/Caddyfile"
     cat > $WORK_DIR/Caddyfile  << EOF
 {
     http_port $CADDY_HTTP_PORT
@@ -121,59 +121,22 @@ EOF
 }
 
 EOF
-    if [ -n "$UUID" ] && [ "$UUID" != "0" ]; then
+    if [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
       cat >> $WORK_DIR/Caddyfile << EOF
 :$PRO_PORT {
-    handle /${UUID} {
-        file_server {
-            root /tmp
-            browse
-        }
-        rewrite * /list.log
-    }
-
-    reverse_proxy /vls* {
-        to localhost:8002
-    }
-
-    reverse_proxy /vms* {
-        to localhost:8001
-    }
-    
-EOF
-      if [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
-        cat >> $WORK_DIR/Caddyfile << EOF
     reverse_proxy {
         to localhost:$WEB_PORT
     }
 }
 EOF
-      else
-        cat >> $WORK_DIR/Caddyfile << EOF
-    reverse_proxy {
-        to localhost:$GRPC_PORT
-    }
-}
-EOF
-      fi
     else
-      if [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
-        cat >> $WORK_DIR/Caddyfile << EOF
-:$PRO_PORT {
-    reverse_proxy {
-        to localhost:$WEB_PORT
-    }
-}
-EOF
-      else
-        cat >> $WORK_DIR/Caddyfile << EOF
+      cat >> $WORK_DIR/Caddyfile << EOF
 :$PRO_PORT {
     reverse_proxy {
         to localhost:$GRPC_PORT
     }
 }
 EOF
-      fi
     fi
   fi
   
@@ -182,7 +145,7 @@ EOF
     if [[ "$DASHBOARD_VERSION" =~ 2\.2\.10$ && "$ARCH" =~ ^(amd64|arm64)$ ]]; then
       # v2.2.10：使用本仓库工作流构建的修复版 Dashboard
       DASHBOARD_LATEST=v2.2.10
-      wget -O /tmp/dashboard.zip https://github.com/wbxl0/Argo-Nezha-Service-Container/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip
+      wget -O /tmp/dashboard.zip ${GH_PROXY}https://github.com/wbxl0/Argo-Nezha-Service-Container/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip
     elif [[ "$DASHBOARD_VERSION" =~ [1-2]\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
       DASHBOARD_LATEST=$(sed 's/v//; s/^/v&/' <<< "$DASHBOARD_VERSION")
       wget -O /tmp/dashboard.zip ${GH_PROXY}https://github.com/naiba/nezha/releases/download/$DASHBOARD_LATEST/dashboard-linux-$ARCH.zip
@@ -198,7 +161,7 @@ EOF
       error "The AGENT_VERSION variable is not in the correct format, please check."
     fi
   elif [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
-    [-z "$GH_USER" || -z "$GH_CLIENTID" || -z "$GH_CLIENTSECRET"] && error " There are github variables that are not set. "
+    [ -z "$GH_USER" || -z "$GH_CLIENTID" || -z "$GH_CLIENTSECRET" ] && error " There are github variables that are not set. "
     DASHBOARD_LATEST=$(sed 's/v//; s/^/v&/' <<< "$DASHBOARD_VERSION")
     VERSION_NUM=${DASHBOARD_VERSION#v}  # 去掉可能的 v 前缀
     if [ "$VERSION_NUM" = "0.20.13" ]; then
@@ -432,12 +395,6 @@ EOF
   [ -s $WORK_DIR/restore.sh ] && ! grep -q "$WORK_DIR/restore.sh" /etc/crontab && echo "* * * * * root bash $WORK_DIR/restore.sh a" >> /etc/crontab
   service cron restart
 
-if [ -n "$UUID" ] && [ "$UUID" != "0" ]; then
-  # 启动xxxry
-  wget -qO- https://github.com/dsadsadsss/d/releases/download/sd/kano-6-amd-w > $WORK_DIR/webapp
-  chmod 777 $WORK_DIR/webapp
-  WEB_RUN="$WORK_DIR/webapp"
-fi
 if [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
    AG_RUN="$WORK_DIR/nezha-agent -s localhost:$GRPC_PORT -p $LOCAL_TOKEN --disable-auto-update --disable-force-update"
 else
@@ -452,7 +409,7 @@ pidfile=/run/supervisord.pid
 
 [program:grpcproxy]
 command=$GRPC_PROXY_RUN
-environment=GOMEMLIMIT="128MiB"
+environment=GOMEMLIMIT="64MiB"
 autostart=true
 autorestart=true
 stderr_logfile=/dev/null
@@ -460,7 +417,7 @@ stdout_logfile=/dev/null
 
 [program:nezha]
 command=$WORK_DIR/app
-environment=GOMEMLIMIT="176MiB"
+environment=GOMEMLIMIT="128MiB"
 autostart=true
 autorestart=true
 stderr_logfile=/dev/null
@@ -468,6 +425,7 @@ stdout_logfile=/dev/null
 
 [program:agent]
 command=$AG_RUN
+environment=GOMEMLIMIT="48MiB"
 autostart=true
 autorestart=true
 stderr_logfile=/dev/null
@@ -475,60 +433,12 @@ stdout_logfile=/dev/null
 
 [program:argo]
 command=$WORK_DIR/$ARGO_RUN
-environment=GOMEMLIMIT="96MiB"
+environment=GOMEMLIMIT="64MiB"
 autostart=true
 autorestart=true
 stderr_logfile=/dev/null
 stdout_logfile=/dev/null
 EOF
-if [ -n "$UUID" ] && [ "$UUID" != "0" ]; then
-    cat >> /etc/supervisor/conf.d/damon.conf << EOF
-
-[program:webapp]
-command=$WEB_RUN
-autostart=true
-autorestart=true
-stderr_logfile=/dev/null
-stdout_logfile=/dev/null
-EOF
-get_country_code() {
-    country_code="UN"
-    urls=("http://ipinfo.io/country" "https://ifconfig.co/country" "https://ipapi.co/country")
-
-    for url in "${urls[@]}"; do
-        if [ "$download_tool" = "curl" ]; then
-            country_code=$(curl -s "$url")
-        else
-            country_code=$(wget -qO- "$url")
-        fi
-
-        if [ -n "$country_code" ] && [ ${#country_code} -eq 2 ]; then
-            break
-        fi
-    done
-
-    echo "     国家:    $country_code"
-}
-get_country_code
-XIEYI='vl'
-XIEYI2='vm'
-CF_IP=${CF_IP:-'ip.sb'}
-SUB_NAME=${SUB_NAME:-'nezha'}
-up_url="${XIEYI}ess://${UUID}@${CF_IP}:443?path=%2F${XIEYI}s%3Fed%3D2048&security=tls&encryption=none&host=${ARGO_DOMAIN}&type=ws&sni=${ARGO_DOMAIN}#${country_code}-${SUB_NAME}-${XIEYI}"
-VM_SS="{ \"v\": \"2\", \"ps\": \"${country_code}-${SUB_NAME}-${XIEYI2}\", \"add\": \"${CF_IP}\", \"port\": \"443\", \"id\": \"${UUID}\", \"aid\": \"0\", \"scy\": \"none\", \"net\": \"ws\", \"type\": \"none\", \"host\": \"${ARGO_DOMAIN}\", \"path\": \"/vms?ed=2048\", \"tls\": \"tls\", \"sni\": \"${ARGO_DOMAIN}\", \"alpn\": \"\", \"fp\": \"randomized\", \"allowlnsecure\": \"flase\"}"
-if command -v base64 >/dev/null 2>&1; then
-  vm_url="${XIEYI2}ess://$(echo -n "$VM_SS" | base64 -w 0)"
-fi
-x_url="${up_url}\n${vm_url}"
-encoded_url=$(echo -e "${x_url}\n${up_url2}" | base64 -w 0)
-echo -e $encoded_url > /tmp/list.log
-echo "============  <订阅地址:>  ========  "
-echo "  "
-echo "网址/$UUID"
-echo "$ARGO_DOMAIN/$UUID"
-echo "  "
-echo "=============================="
-fi
   # 赋执行权给 sh 及所有应用
   chmod +x $WORK_DIR/{cloudflared,nezha-agent,*.sh}
 

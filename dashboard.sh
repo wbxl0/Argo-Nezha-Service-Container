@@ -152,7 +152,7 @@ check_port() {
     if [ "$SYSTEM" = 'Alpine' ]; then
       netstat -an | awk '/:[0-9]+/{print $4}' | awk -F ":" '{print $NF}' | grep -q $START_PORT || FREE_PORT+=("$START_PORT")
     else
-      lsof -i:$START_PORT >/dev/null 2>&1 || FREE_PORT+=("$START_PORT")
+      ss -ltn | awk '{print $4}' | awk -F ':' '{print $NF}' | grep -qx "$START_PORT" || FREE_PORT+=("$START_PORT")
     fi
     [ "${#FREE_PORT[@]}" = $NEED_PORTS ] && break
     ((START_PORT++))
@@ -327,14 +327,14 @@ dashboard_variables() {
     [[ -z "$ARGO_AUTH" || -z "$ARGO_DOMAIN" ]] && error "\n $(text 18) "
   fi
 
-  [ -z "$GH_REPO"] && reading "\n (7/14) $(text 14) " GH_REPO
+  [ -z "$GH_REPO" ] && reading "\n (7/14) $(text 14) " GH_REPO
   if [ -n "$GH_REPO" ]; then
     [ -z "$GH_BACKUP_USER" ] && reading "\n (8/14) $(text 15) " GH_BACKUP_USER
     GH_BACKUP_USER=${GH_BACKUP_USER:-$GH_USER}
-    [ -z "$GH_EMAIL"] && reading "\n (9/14) $(text 16) " GH_EMAIL
-    [ -z "$GH_PAT"] && reading "\n (10/14) $(text 17) " GH_PAT
-    [ -z "$BACKUP_TIME"] && reading "\n (11/14) $(text 43) " BACKUP_TIME
-    [ -z "$BACKUP_NUM"] && reading "\n (12/14) $(text 44) " BACKUP_NUM
+    [ -z "$GH_EMAIL" ] && reading "\n (9/14) $(text 16) " GH_EMAIL
+    [ -z "$GH_PAT" ] && reading "\n (10/14) $(text 17) " GH_PAT
+    [ -z "$BACKUP_TIME" ] && reading "\n (11/14) $(text 43) " BACKUP_TIME
+    [ -z "$BACKUP_NUM" ] && reading "\n (12/14) $(text 44) " BACKUP_NUM
   fi
   if [ -z "$BACKUP_TIME" ]; then
       BACKUP_TIME="0 4 * * *"
@@ -364,7 +364,7 @@ dashboard_variables() {
     error "\n $(text 42) \n"
   fi
 
-  [ -z "$AUTO_RENEW_OR_NOT"] && reading "\n (14/14) $(text 41) " AUTO_RENEW_OR_NOT
+  [ -z "$AUTO_RENEW_OR_NOT" ] && reading "\n (14/14) $(text 41) " AUTO_RENEW_OR_NOT
   grep -qiw 'n' <<< "$AUTO_RENEW_OR_NOT" && IS_AUTO_RENEW=#
 }
 
@@ -381,7 +381,7 @@ install() {
     # local CADDY_LATEST=$(wget -qO- "${GH_PROXY}https://api.github.com/repos/caddyserver/caddy/releases/latest" | awk -F [v\"] '/"tag_name"/{print $5}' || echo '2.9.1')
     local CADDY_LATEST=$CADDY_VERSION
     wget -c ${GH_PROXY}https://github.com/caddyserver/caddy/releases/download/v${CADDY_LATEST}/caddy_${CADDY_LATEST}_linux_${ARCH}.tar.gz -qO- | tar xz -C $TEMP_DIR caddy >/dev/null 2>&1
-    GRPC_PROXY_RUN="$WORK_DIR/caddy run --config $WORK_DIR/Caddyfile --watch"
+    GRPC_PROXY_RUN="$WORK_DIR/caddy run --config $WORK_DIR/Caddyfile"
     cat > $TEMP_DIR/Caddyfile  << EOF
 {
     http_port $CADDY_HTTP_PORT

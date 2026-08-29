@@ -68,7 +68,6 @@ docker镜像：`mikehand888/argo-nezha:latest` ， 支持 amd64 和 arm64 架构
   | DASHBOARD_VERSION   | 否 | 指定面板的版本。`vx.xx.xx` 的格式，填写了将会把版本固定在所填版本。<br>版本分配规则：<br>• 不填：则使用 [`naiba/nezha`](https://github.com/nezhahq/nezha) 最新版本的 `nezha`<br>• 版本 = `0.20.13`: 从 [`nap0o/nezha-dashboard`](https://github.com/nap0o/nezha-dashboard) 下载<br>• `v0` 且版本 > `0.20.13`：从 [`railzen/nezha-zero`](https://github.com/railzen/nezha-zero) 下载<br>• 其余版本：从 [`naiba/nezha`](https://github.com/nezhahq/nezha) 下载 |
   | AGENT_VERSION       | 否 | 指定探针的版本。`vx.xx.xx` 的格式，填写了将会把版本固定在所填版本。<br>不填有两种情况：<br>• 对于 `v1`面板是保持最新的 `v1` 探针<br>• 对于 `v0` 面板是` v0.20.5` 版本 |
   | PRO_PORT            | 否 | 容器平台的开放端口，不填默认为 `80` 。如果容器开放的端口不为 `80` 且 `argo` 隧道使用的 `token` ，则修改此处并手动修改隧道设置里对应的端口 |
-  | UUID                | 否 | 填写会有节点，在日志查看base64 |
   | BACKUP_TIME         | 否 | 自定义备份时间，不填默认为 `0 4 * * *`，即每天北京时间 `4` 点备份 |
   | BACKUP_NUM          | 否 | 自定义备份仓库中的备份总数，不填默认为 `5` ，即仓库里只保留5个备份 |
 
@@ -85,7 +84,7 @@ bash <(wget -qO- https://raw.githubusercontent.com/wbxl0/Argo-Nezha-Service-Cont
   | 探针不上线，[点击前往域名准备教程](https://github.com/wbxl0/Argo-Nezha-Service-Container#%E5%87%86%E5%A4%87%E9%9C%80%E8%A6%81%E7%94%A8%E7%9A%84%E5%8F%98%E9%87%8F) | 请在 `cf` 面板查看 `argo`域名的 `grpc` 设置，一定要开启！还有可能是域名的问题，可以换个域名试试 |
   | agent的安装命令 | 端口需确认为 `443` ，`tls` 需确认为 `true` |
   | Github OAuth 2.0 | `v0` 为 `https://你的面板域名/oauth2/callback` <br>`v1` 为 `https://你的面板域名/api/v1/oauth2/callback` <br>`v1` 需要先使用本地账户登录，并在 `右上角头像-个人信息` 里完成 OAuth2 绑定，如果还没有绑定关系，不能直接使用 OAuth2 登录到本地账户|
-  | 使用备份，[点击前往备份教程](https://github.com/wbxl0/Argo-Nezha-Service-Container?tab=readme-ov-file#%E6%89%8B%E5%8A%A8%E5%A4%87%E4%BB%BD%E6%95%B0%E6%8D%AE) | 有的容器重启会丢失数据，需要使用备份，需要 `GH_USER`或`GH_BACKUP_USER`、`GH_REPO`、`GH_EMAIL`、`GH_PAT` 这4个变量有值 |
+  | 使用备份，[点击前往备份教程](https://github.com/wbxl0/Argo-Nezha-Service-Container?tab=readme-ov-file#%E6%89%8B%E5%8A%A8%E5%A4%87%E4%BB%BD%E6%95%B0%E6%8D%AE) | 有的容器重启会丢失数据，需要使用备份，需要 `GH_USER`或`GH_BACKUP_USER`、`GH_REPO`、`GH_PAT` 这3个变量有值 |
   | 注意自动还原 | 容器在修改环境变量后会重新部署，注意备份库会自动还原备份 |
   | `v1` 面板开启tsdb功能 | 已运行容器需要自行去容器后台修改面板配置文件并备份；<br>vps需要修改面板配置文件并重启面板 |
   | 使用本地ssh，[点击前往ssh教程](https://github.com/wbxl0/Argo-Nezha-Service-Container?tab=readme-ov-file#ssh-%E6%8E%A5%E5%85%A5) | 需要 `GH_CLIENTID`、`GH_CLIENTSECRET` 这2个变量有值 |
@@ -210,7 +209,7 @@ Argo 隧道认证方式有 json 和 token，使用两个方式其中之一。推
 
 
 ## PaaS 部署实例
-镜像 `fscarmen/argo-nezha:latest` ， 支持 amd64 和 arm64 架构
+镜像 `mikehand888/argo-nezha:latest` ， 支持 amd64 和 arm64 架构
 
 用到的变量
   | 变量名        | 是否必须  | 备注 |
@@ -230,7 +229,7 @@ Argo 隧道认证方式有 json 和 token，使用两个方式其中之一。推
 
 Koyeb
 
-[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=docker&name=nezha&ports=80;http;/&env[GH_USER]=&env[GH_CLIENTID]=&env[GH_CLIENTSECRET]=&env[GH_REPO]=&env[GH_EMAIL]=&env[GH_PAT]=&env[ARGO_AUTH]=&env[ARGO_DOMAIN]=&image=docker.io/fscarmen/argo-nezha)
+[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=docker&name=nezha&ports=80;http;/&env[GH_USER]=&env[GH_CLIENTID]=&env[GH_CLIENTSECRET]=&env[GH_REPO]=&env[GH_EMAIL]=&env[GH_PAT]=&env[ARGO_AUTH]=&env[ARGO_DOMAIN]=&image=docker.io/mikehand888/argo-nezha)
 
 <img width="927" alt="image" src="https://user-images.githubusercontent.com/92626977/231088411-fbac3e6e-a8a6-4661-bcf8-7c777aa8ffeb.png">
 <img width="750" alt="image" src="https://user-images.githubusercontent.com/92626977/231088973-7134aefd-4c80-4559-8e40-17c3be11d27d.png">
@@ -263,7 +262,7 @@ docker run -dit \
            -e REVERSE_PROXY_MODE=<选填，选填，选填! 如想用 Nginx 或 gRPCwebProxy 替代 Caddy 反代的话，请设置该变量并赋值为 `nginx` 或 `grpcwebproxy`> \
            -e NO_AUTO_RENEW=<选填，选填，选填! 如果不需要自动在线同步最新的 backup.sh 和 restore.sh，请设置该变量并赋值为 `1`> \
            -e DASHBOARD_VERSION=<选填，选填，选填! 指定面板的版本，以 `v0.00.00` 的格式，后续将固定在该版本不会升级，不填则使用默认的 `v0.20.13`> \
-           fscarmen/argo-nezha
+           mikehand888/argo-nezha
 ```
 
 ### docker-compose 部署
@@ -273,7 +272,7 @@ networks:
         name: nezha-dashboard
 services:
     argo-nezha:
-        image: fscarmen/argo-nezha
+        image: mikehand888/argo-nezha
         pull_policy: always
         container_name: nezha_dashboard
         restart: always

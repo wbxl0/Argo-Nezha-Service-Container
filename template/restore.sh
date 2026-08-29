@@ -119,7 +119,7 @@ if [ "$1" = a ]; then
 elif [ "$1" = f ]; then
   [[ "$ONLINE" =~ tar\.gz$ ]] && FILE="$ONLINE" || exit
 elif [[ "$1" =~ tar\.gz$ ]]; then
-  [[ "$FILE" =~ http.*/.*tar.gz ]] && FILE=$(awk -F '/' '{print $NF}' <<< $FILE) || FILE="$1"
+  [[ "$1" =~ http.*/.*tar.gz ]] && FILE=$(awk -F '/' '{print $NF}' <<< "$1") || FILE="$1"
 elif [ -z "$1" ]; then
   BACKUP_FILE_LIST=($(wget -qO- --header="Authorization: token $GH_PAT" https://api.github.com/repos/$GH_BACKUP_USER/$GH_REPO/contents/ | awk -F '"' '/"path".*tar.gz/{print $4}' | sort -r))
   until [[ "$CHOOSE" =~ ^[0-9]+$ ]] && (( CHOOSE >= 1 && CHOOSE <= ${#BACKUP_FILE_LIST[@]} )); do
