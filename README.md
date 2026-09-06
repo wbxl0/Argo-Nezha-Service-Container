@@ -9,6 +9,12 @@
 <details>
   <summary>更新日志</summary>
 
+- 2026.8.30
+  - 移除内置 UUID 代理节点功能（不再下载/运行第三方闭源二进制，镜像更干净）。
+  - 修复 BACKUP_NUM 变量失效导致备份仓库只保留 1 份的问题；修复 dashboard.sh 交互安装多处失效、端口检测依赖缺失等脚本 bug。
+  - 内存优化：下调各进程 GOMEMLIMIT 上限（caddy 64MiB / 面板 128MiB / argo 64MiB / 探针 48MiB），移除 caddy --watch。
+  - v2.2.10 修复版面板下载支持 GH_PROXY 加速。
+  - 后台服务器列表默认按名称 A-Z 排序；移除"启用 DDNS"列（编辑服务器内仍可配置）。
 - 2026.8.10
   - 修复 template/backup.sh, 新备份逻辑测试成功。
   - 面板版本选择同步上游。
@@ -44,7 +50,7 @@
   - 获得 `github` 的 `OAuth 2.0` 认证和 `PAT` ，[点击前往教程](https://github.com/wbxl0/Argo-Nezha-Service-Container/blob/main/README.md#%E5%87%86%E5%A4%87%E9%9C%80%E8%A6%81%E7%94%A8%E7%9A%84%E5%8F%98%E9%87%8F)，注意 `v0` 和 `v1` 的 `OAuth 2.0` 认证是不同的，[点击前往了解区别](https://github.com/wbxl0/Argo-Nezha-Service-Container#%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98%E4%BB%A5%E5%8F%8A%E5%9D%91%E7%82%B9)。
 ## docker镜像及其环境变量说明
 
-docker镜像：`mikehand888/argo-nezha:latest` ， 支持 amd64 和 arm64 架构。
+docker镜像：由本仓库的 GitHub Actions 自动构建（镜像名由 Actions Secrets 里的 `DOCKER_USERNAME` / `DOCKER_REPO` 决定），支持 amd64 和 arm64 架构。
 
 [容器平台上部署教程，点击前往](https://github.com/wbxl0/Argo-Nezha-Service-Container/blob/main/README.md#paas-%E9%83%A8%E7%BD%B2%E5%AE%9E%E4%BE%8B)
 
@@ -209,7 +215,7 @@ Argo 隧道认证方式有 json 和 token，使用两个方式其中之一。推
 
 
 ## PaaS 部署实例
-镜像 `mikehand888/argo-nezha:latest` ， 支持 amd64 和 arm64 架构
+镜像 `fscarmen/argo-nezha:latest` ， 支持 amd64 和 arm64 架构
 
 用到的变量
   | 变量名        | 是否必须  | 备注 |
@@ -229,7 +235,7 @@ Argo 隧道认证方式有 json 和 token，使用两个方式其中之一。推
 
 Koyeb
 
-[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=docker&name=nezha&ports=80;http;/&env[GH_USER]=&env[GH_CLIENTID]=&env[GH_CLIENTSECRET]=&env[GH_REPO]=&env[GH_EMAIL]=&env[GH_PAT]=&env[ARGO_AUTH]=&env[ARGO_DOMAIN]=&image=docker.io/mikehand888/argo-nezha)
+[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=docker&name=nezha&ports=80;http;/&env[GH_USER]=&env[GH_CLIENTID]=&env[GH_CLIENTSECRET]=&env[GH_REPO]=&env[GH_EMAIL]=&env[GH_PAT]=&env[ARGO_AUTH]=&env[ARGO_DOMAIN]=&image=docker.io/fscarmen/argo-nezha)
 
 <img width="927" alt="image" src="https://user-images.githubusercontent.com/92626977/231088411-fbac3e6e-a8a6-4661-bcf8-7c777aa8ffeb.png">
 <img width="750" alt="image" src="https://user-images.githubusercontent.com/92626977/231088973-7134aefd-4c80-4559-8e40-17c3be11d27d.png">
@@ -262,7 +268,7 @@ docker run -dit \
            -e REVERSE_PROXY_MODE=<选填，选填，选填! 如想用 Nginx 或 gRPCwebProxy 替代 Caddy 反代的话，请设置该变量并赋值为 `nginx` 或 `grpcwebproxy`> \
            -e NO_AUTO_RENEW=<选填，选填，选填! 如果不需要自动在线同步最新的 backup.sh 和 restore.sh，请设置该变量并赋值为 `1`> \
            -e DASHBOARD_VERSION=<选填，选填，选填! 指定面板的版本，以 `v0.00.00` 的格式，后续将固定在该版本不会升级，不填则使用默认的 `v0.20.13`> \
-           mikehand888/argo-nezha
+           fscarmen/argo-nezha
 ```
 
 ### docker-compose 部署
@@ -272,7 +278,7 @@ networks:
         name: nezha-dashboard
 services:
     argo-nezha:
-        image: mikehand888/argo-nezha
+        image: fscarmen/argo-nezha
         pull_policy: always
         container_name: nezha_dashboard
         restart: always
