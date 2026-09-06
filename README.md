@@ -1,6 +1,6 @@
 # Argo-Nezha-Service-Container 兼容 v0 和 v1
 
-- 本项目**兼容了nezha的v0和v1版本**，基于fscarmen大佬的 [Argo-Nezha-Service-Container](https://github.com/fscarmen2/Argo-Nezha-Service-Container) 修改。
+- 本项目**兼容了nezha的v0和v1版本**，基于fscarmen大佬的 [Argo-Nezha-Service-Container](https://github.com/fscarmen2/Argo-Nezha-Service-Container) 修改。本 fork 的自用说明（构建方式、变量、魔改流程、踩坑记录）见 **[wbxl0.md](wbxl0.md)**。
 
 - docker版本还结合了dsadsadsss大佬的 [Docker-for-Nezha-Argo-server-v0.x](https://github.com/dsadsadsss/Docker-for-Nezha-Argo-server-v0.x) 。
 
