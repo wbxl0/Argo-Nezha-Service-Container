@@ -62,7 +62,6 @@ supervisor 的 GOMEMLIMIT：caddy 64MiB / 面板 128MiB / argo 64MiB / agent 48M
 1. `patches/admin-frontend-v2.2.5-server.patch` 是对 admin-frontend v2.2.5 的**全部**自定义
 2. 流程：clone v2.2.5 → `git apply` 现有补丁 → 改代码 → `git diff` 重新生成补丁 → 拿干净 clone `git apply --check` 验证 → push 触发 CI
 3. 已做改动：删分组列、操作列 sticky、**列表默认按名称 A-Z（`localeCompare` + `sensitivity: "base"`，不分大小写）**、删"启用 DDNS"列（编辑服务器里仍可配置）
-4. 本机 git 需要走代理：`git -c http.proxy=socks5h://127.0.0.1:10808 push ...`
 
 ## 八、踩坑存档
 
