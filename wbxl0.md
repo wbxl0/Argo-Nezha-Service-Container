@@ -32,13 +32,21 @@
 | `BACKUP_NUM` | 备份仓库保留份数，默认 5。**改了要重建容器才生效**（DAYS 是安装时写进 backup.sh 的，renew.sh 只更新模板主体） |
 | `BACKUP_TIME` | 备份 cron，默认 `0 4 * * *`；备份窗口顺带重启 caddy 释放内存 |
 | `REVERSE_PROXY_MODE` | `caddy`（默认）/ `nginx` / `grpcwebproxy` |
+| `MEM_LIMIT_NEZHA` / `MEM_LIMIT_GRPCPROXY` / `MEM_LIMIT_ARGO` / `MEM_LIMIT_AGENT` | 各进程 GOMEMLIMIT，**默认按容器内存上限自动分配**（面板 30% / caddy 26% / cloudflared 16% / 探针 8%），通常不用填；特殊负载可单独覆盖，如 `-e MEM_LIMIT_NEZHA=256MiB` |
 | `UUID` | 已废弃，代理节点功能已移除 |
 | 其余 `GH_*` / `ARGO_*` / `PRO_PORT` | 同上游，见 README |
 
-## 四、内存参数（低配 PaaS 实测）
+## 四、内存参数（GOMEMLIMIT）
 
-supervisor 的 GOMEMLIMIT：caddy 64MiB / 面板 128MiB / argo 64MiB / agent 48MiB（总上限 ~304MiB）。
-排查内存用：`ps aux --sort=-rss | head -n 8`；Go 程序 RSS 会慢慢养到上限再被 GC 压住，顶满不一定是泄漏。
+supervisor 的 GOMEMLIMIT 按容器内存上限自动分配：面板 30%、caddy 26%、cloudflared 16%、探针 8%
+（512MB 容器 → 153/133/81/40MiB；2GB 容器 → 614/532/327/163MiB）。可用 `-e MEM_LIMIT_XXX=` 单独覆盖。
+
+**⚠️ 这是一个踩过的坑**：GOMEMLIMIT 是 Go 的 GC 触发线，不是预留量。
+- 设得**远低于**进程实际工作集 → GC 抖动：CPU 飙升、请求停顿、gRPC 流被 CANCEL，表现为**隧道 1033 / 探针集体掉线**（曾用 64MiB 跑 caddy 实际 220MB，CPU 烧到 60%）
+- 设得**高于**容器内存上限 → 被 cgroup OOM 杀（退出码 137）
+- 所以固定值不可取，必须随容器大小走——这就是自动分配的原因
+
+排查：`docker stats --no-stream`、`ps aux --sort=-rss | head -n 8`；容器内存水位看 `cat /sys/fs/cgroup/memory.current`。
 
 ## 五、备份机制要点
 
@@ -61,10 +69,26 @@ supervisor 的 GOMEMLIMIT：caddy 64MiB / 面板 128MiB / argo 64MiB / agent 48M
 
 1. `patches/admin-frontend-v2.2.5-server.patch` 是对 admin-frontend v2.2.5 的**全部**自定义
 2. 流程：clone v2.2.5 → `git apply` 现有补丁 → 改代码 → `git diff` 重新生成补丁 → 拿干净 clone `git apply --check` 验证 → push 触发 CI
-3. 已做改动：删分组列、操作列 sticky、**列表默认按名称 A-Z（`localeCompare` + `sensitivity: "base"`，不分大小写）**、删"启用 DDNS"列（编辑服务器里仍可配置）
+3. 已做改动：删分组列、操作列 sticky、标题旁加 **A-Z 排序开关**（默认关闭＝上游原顺序，勾选则按名称大小写不敏感排序，不记忆状态）、删"启用 DDNS"列（编辑服务器里仍可配置）
 
 ## 八、踩坑存档
 
 - **探针集体掉线重连**：根因是 v2.2.10 官方锁定的 grpc-go 1.81.1 会周期性重置 gRPC 连接（commit `24792fd`），修复版已升 1.83.0。与 Nginx/Caddy 无关，换反代没用
 - **面板鸡不上线**：先查三处——`config.yml` 的 `client_secret`、`config.yaml` 的 `agent_secret_key`、`server:` 是否为当前 Argo 域名；再查 WAF 封禁列表
-- **内存顶满**：三个 Go 程序的 GOMEMLIMIT 上限合计 ≈ 套餐内存时是"设计如此"，压低上限即可，不是泄漏
+- **内存顶满**：不是泄漏，但**不要靠压低 GOMEMLIMIT 来解决**——压到低于工作集反而触发 GC 抖动（见第四节）。正解是按容器内存自动分配，或清理僵尸探针
+
+## 九、故障排查入口（2026.9 事故后新增）
+
+日志已落盘（不再丢 `/dev/null`），排查命令：
+
+| 场景 | 命令 |
+|---|---|
+| 隧道断连 / 1033 | `docker exec nezha_dashboard grep -iE "Registered\|Unregistered\|graceful shutdown" /dashboard/logs/argo.log \| tail -20` |
+| 探针掉线（面板侧） | `docker exec nezha_dashboard grep "NEZHA>>" /dashboard/logs/nezha.log \| tail -30` |
+| 谁在疯狂重连 | `docker exec nezha_dashboard sh -c "grep -o 'clientID: [0-9]*' /dashboard/logs/nezha.log \| sort \| uniq -c \| sort -rn \| head"` |
+| 资源占用 | `docker stats --no-stream`；`uptime` |
+
+**判读要点**：
+- `Initiating graceful shutdown due to signal terminated` = 我们自己重启（配置变更），不是故障
+- **面板鸡（本机探针）是最佳对照组**：它走完整链路且路径最短，它稳定就说明面板/隧道侧健康；远端错误多通常是 Serverless（Vercel/Cloudflare/Streamlit）或免费 PaaS 的进程回收特性
+- 日志每个程序 2MB × 3 份轮转，`logs/` 不进备份包

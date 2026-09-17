@@ -402,6 +402,19 @@ else
 fi
   # 生成 supervisor 进程守护配置文件
   # 日志落盘：原先全部丢弃到 /dev/null，导致隧道断连/进程重启无从排查
+  # GOMEMLIMIT 是 Go 运行时的软上限（堆接近它就开始激进 GC）：设得远低于进程实际工作集
+  # 会引发 GC 抖动——CPU 飙升、请求停顿、gRPC 流被 CANCEL，表现为隧道 1033 / 探针集体
+  # 掉线；设得高于容器内存上限则会被 cgroup OOM 杀掉（退出码 137）。因此按容器内存上限
+  # 比例分配，任何环境变量（如 -e MEM_LIMIT_NEZHA=256MiB）都可单独覆盖。
+  MEM_LIMIT_TOTAL=$(cat /sys/fs/cgroup/memory.max 2>/dev/null)
+  [[ ! "$MEM_LIMIT_TOTAL" =~ ^[0-9]+$ ]] && MEM_LIMIT_TOTAL=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null)
+  { [[ ! "$MEM_LIMIT_TOTAL" =~ ^[0-9]+$ ]] || [ "$MEM_LIMIT_TOTAL" -gt 1099511627776 ]; } && MEM_LIMIT_TOTAL=$((2 * 1024 * 1024 * 1024))
+  MEM_MB=$((MEM_LIMIT_TOTAL / 1048576))
+  MEM_LIMIT_NEZHA=${MEM_LIMIT_NEZHA:-$((MEM_MB * 30 / 100))MiB}
+  MEM_LIMIT_GRPCPROXY=${MEM_LIMIT_GRPCPROXY:-$((MEM_MB * 26 / 100))MiB}
+  MEM_LIMIT_ARGO=${MEM_LIMIT_ARGO:-$((MEM_MB * 16 / 100))MiB}
+  MEM_LIMIT_AGENT=${MEM_LIMIT_AGENT:-$((MEM_MB * 8 / 100))MiB}
+  hint " Memory limit: $MEM_LIMIT_TOTAL bytes -> nezha $MEM_LIMIT_NEZHA, grpcproxy $MEM_LIMIT_GRPCPROXY, argo $MEM_LIMIT_ARGO, agent $MEM_LIMIT_AGENT"
   mkdir -p $WORK_DIR/logs
   cat > /etc/supervisor/conf.d/damon.conf << EOF
 [supervisord]
@@ -414,7 +427,7 @@ pidfile=/run/supervisord.pid
 
 [program:grpcproxy]
 command=$GRPC_PROXY_RUN
-environment=GOMEMLIMIT="64MiB"
+environment=GOMEMLIMIT="$MEM_LIMIT_GRPCPROXY"
 autostart=true
 autorestart=true
 redirect_stderr=true
@@ -424,7 +437,7 @@ stdout_logfile_backups=3
 
 [program:nezha]
 command=$WORK_DIR/app
-environment=GOMEMLIMIT="128MiB"
+environment=GOMEMLIMIT="$MEM_LIMIT_NEZHA"
 autostart=true
 autorestart=true
 redirect_stderr=true
@@ -434,7 +447,7 @@ stdout_logfile_backups=3
 
 [program:agent]
 command=$AG_RUN
-environment=GOMEMLIMIT="48MiB"
+environment=GOMEMLIMIT="$MEM_LIMIT_AGENT"
 autostart=true
 autorestart=true
 redirect_stderr=true
@@ -444,7 +457,7 @@ stdout_logfile_backups=3
 
 [program:argo]
 command=$WORK_DIR/$ARGO_RUN
-environment=GOMEMLIMIT="64MiB"
+environment=GOMEMLIMIT="$MEM_LIMIT_ARGO"
 autostart=true
 autorestart=true
 redirect_stderr=true
