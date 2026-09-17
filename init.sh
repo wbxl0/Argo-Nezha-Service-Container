@@ -401,10 +401,15 @@ else
    AG_RUN="$WORK_DIR/nezha-agent -c $WORK_DIR/data/config.yml"
 fi
   # 生成 supervisor 进程守护配置文件
+  # 日志落盘：原先全部丢弃到 /dev/null，导致隧道断连/进程重启无从排查
+  mkdir -p $WORK_DIR/logs
   cat > /etc/supervisor/conf.d/damon.conf << EOF
 [supervisord]
 nodaemon=true
-logfile=/dev/null
+logfile=$WORK_DIR/logs/supervisord.log
+logfile_maxbytes=2MB
+logfile_backups=3
+loglevel=info
 pidfile=/run/supervisord.pid
 
 [program:grpcproxy]
@@ -412,32 +417,40 @@ command=$GRPC_PROXY_RUN
 environment=GOMEMLIMIT="64MiB"
 autostart=true
 autorestart=true
-stderr_logfile=/dev/null
-stdout_logfile=/dev/null
+redirect_stderr=true
+stdout_logfile=$WORK_DIR/logs/grpcproxy.log
+stdout_logfile_maxbytes=2MB
+stdout_logfile_backups=3
 
 [program:nezha]
 command=$WORK_DIR/app
 environment=GOMEMLIMIT="128MiB"
 autostart=true
 autorestart=true
-stderr_logfile=/dev/null
-stdout_logfile=/dev/null
+redirect_stderr=true
+stdout_logfile=$WORK_DIR/logs/nezha.log
+stdout_logfile_maxbytes=2MB
+stdout_logfile_backups=3
 
 [program:agent]
 command=$AG_RUN
 environment=GOMEMLIMIT="48MiB"
 autostart=true
 autorestart=true
-stderr_logfile=/dev/null
-stdout_logfile=/dev/null
+redirect_stderr=true
+stdout_logfile=$WORK_DIR/logs/agent.log
+stdout_logfile_maxbytes=2MB
+stdout_logfile_backups=3
 
 [program:argo]
 command=$WORK_DIR/$ARGO_RUN
 environment=GOMEMLIMIT="64MiB"
 autostart=true
 autorestart=true
-stderr_logfile=/dev/null
-stdout_logfile=/dev/null
+redirect_stderr=true
+stdout_logfile=$WORK_DIR/logs/argo.log
+stdout_logfile_maxbytes=2MB
+stdout_logfile_backups=3
 EOF
   # 赋执行权给 sh 及所有应用
   chmod +x $WORK_DIR/{cloudflared,nezha-agent,*.sh}
