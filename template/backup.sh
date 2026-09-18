@@ -217,7 +217,7 @@ EOF
     fi
 
     # 只备份 data/ 目录下的 config.yaml 和 sqlite.db； resource/ 目录下名字有 custom 的自定义主题文件夹
-    TIME=$(date "+%Y-%m-%d-%H:%M:%S")
+    TIME=$(date "+%Y-%m-%d-%H_%M_%S")
     echo "↓↓↓↓↓↓↓↓↓↓ dashboard-$TIME.tar.gz list ↓↓↓↓↓↓↓↓↓↓"
     [ -d "resource" ] && find resource/ -type d -name "*custom*" | tar czvf /tmp/dashboard-$TIME.tar.gz -T- --exclude=data/tsdb data/ || tar czvf /tmp/dashboard-$TIME.tar.gz --exclude=data/tsdb data/
     echo -e "↑↑↑↑↑↑↑↑↑↑ dashboard-$TIME.tar.gz list ↑↑↑↑↑↑↑↑↑↑\n\n"
