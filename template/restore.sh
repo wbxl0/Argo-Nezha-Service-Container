@@ -79,7 +79,7 @@ if ls "$NO_ACTION_FLAG"* >/dev/null 2>&1; then
 fi
 
 # 获取 Github 上的 README.md 文件内容
-ONLINE="$(wget -qO- --header="Authorization: token $GH_PAT" ${GH_PROXY}https://raw.githubusercontent.com/$GH_BACKUP_USER/$GH_REPO/main/README.md | sed "/^$/d" | head -n 1)"
+ONLINE="$(wget -t 3 -T 30 -qO- --header="Authorization: token $GH_PAT" ${GH_PROXY}https://raw.githubusercontent.com/$GH_BACKUP_USER/$GH_REPO/main/README.md | sed "/^$/d" | head -n 1)"
 
 # 若用户在 Github 的 README.md 里改了内容包含关键词 backup，则触发实时备份；为解决 Github cdn 导致获取文件内容来回跳的问题，设置自锁并检测到备份文件后延时3分钟断开（3次 运行 restore.sh 的时间)
 if [ -z "$ONLINE" ]; then
@@ -137,7 +137,27 @@ done
 fi
 
 DOWNLOAD_URL=https://raw.githubusercontent.com/$GH_BACKUP_USER/$GH_REPO/main/$FILE
-wget --header="Authorization: token $GH_PAT" --header='Accept: application/vnd.github.v3.raw' -O $TEMP_DIR/backup.tar.gz ${GH_PROXY}${DOWNLOAD_URL}
+
+# 指针防错位：校验 README 指向的文件在仓库中真实存在，否则回退最新备份（防止 404 死指针卡死还原）
+if [ -n "$FILE" ]; then
+  FILE_LIST=$(wget -t 3 -T 30 -qO- --header="Authorization: token $GH_PAT" ${GH_PROXY}https://api.github.com/repos/$GH_BACKUP_USER/$GH_REPO/contents/ | awk -F '"' '/"path".*tar\.gz/{print $4}' | sort -r)
+  if ! echo "$FILE_LIST" | grep -qxF "$FILE"; then
+    hint "\n Pointer target not found in repo: $FILE , fallback to newest backup. \n"
+    FILE=$(echo "$FILE_LIST" | head -n 1)
+  fi
+  [ -n "$FILE" ] || error "\n No backup file found in repo! \n"
+  DOWNLOAD_URL=https://raw.githubusercontent.com/$GH_BACKUP_USER/$GH_REPO/main/$FILE
+fi
+
+# 下载备份文件（-t 3 -T 30：弱网自动重试）
+wget -t 3 -T 30 --header="Authorization: token $GH_PAT" --header='Accept: application/vnd.github.v3.raw' -O $TEMP_DIR/backup.tar.gz ${GH_PROXY}${DOWNLOAD_URL}
+
+# 完整性校验：备份包损坏时绝不应用（防止解压到一半留下半残状态）
+if ! tar -tzf $TEMP_DIR/backup.tar.gz >/dev/null 2>&1; then
+  rm -f $TEMP_DIR/backup.tar.gz
+  warning "\n Backup archive corrupted (tar check failed), skip restore. \n"
+  exit 0
+fi
 
 if [ -e $TEMP_DIR/backup.tar.gz ]; then
   if [ "$IS_DOCKER" = 1 ]; then
@@ -178,9 +198,47 @@ if [ -e $TEMP_DIR/backup.tar.gz ]; then
     fi
   fi
 
-  # 复制临时文件到正式的工作文件夹
-  cp -rf ${TEMP_DIR}/${FILE_PATH}data/* ${WORK_DIR}/data/
+  # 旧数据原子归档（保留最近 1 份），新数据整体换入——避免 cp 合并把新旧文件混在一起
+  BAK_DIR=""
+  if [ -d "${WORK_DIR}/data" ]; then
+    BAK_DIR="${WORK_DIR}/data.bak.$(date +%s)"
+    OLD_BAKS=$(ls -dt ${WORK_DIR}/data.bak.* 2>/dev/null | tail -n +2)
+    if mv "${WORK_DIR}/data" "$BAK_DIR" 2>/dev/null; then
+      [ -n "$OLD_BAKS" ] && rm -rf $OLD_BAKS
+      hint "\n Current data archived to: $BAK_DIR \n"
+      mkdir -p "${WORK_DIR}/data"
+      mv ${TEMP_DIR}/${FILE_PATH}data/* ${WORK_DIR}/data/ 2>/dev/null
+    else
+      warning "\n Archive failed, fallback to merge-copy. \n"
+      cp -rf ${TEMP_DIR}/${FILE_PATH}data/* ${WORK_DIR}/data/
+    fi
+  else
+    mkdir -p "${WORK_DIR}/data"
+    cp -rf ${TEMP_DIR}/${FILE_PATH}data/* ${WORK_DIR}/data/
+  fi
   [ -d ${TEMP_DIR}/${FILE_PATH}resource ] && cp -rf ${TEMP_DIR}/${FILE_PATH}resource ${WORK_DIR}
+
+  # tsdb 不在备份内：从归档原样移回，避免面板丢历史文件
+  if [ -d "$BAK_DIR/tsdb" ] && [ ! -d "${WORK_DIR}/data/tsdb" ]; then
+    mv "$BAK_DIR/tsdb" "${WORK_DIR}/data/tsdb" 2>/dev/null || true
+  fi
+
+  # 密钥自愈：以还原后数据库里的用户级密钥（users.agent_secret）为准回写面板鸡配置，
+  # 无论还原哪个年代的备份，client_secret 都会收敛到同一把钥匙
+  if [ -f "${WORK_DIR}/data/config.yml" ] && [ -f "${WORK_DIR}/data/sqlite.db" ]; then
+    USER_SECRET=$(sqlite3 "${WORK_DIR}/data/sqlite.db" "select agent_secret from users where agent_secret is not null and agent_secret != '' order by id limit 1;" 2>/dev/null)
+    if [ -n "$USER_SECRET" ]; then
+      sed -i "s/^client_secret:.*/client_secret: ${USER_SECRET}/" "${WORK_DIR}/data/config.yml" 2>/dev/null || true
+      hint "\n client_secret aligned with users.agent_secret \n"
+    fi
+  fi
+
+  # 清理 WAL/SHM 并 checkpoint，避免陈旧日志文件与新库不一致
+  if [ -f "${WORK_DIR}/data/sqlite.db" ]; then
+    rm -f "${WORK_DIR}/data/sqlite.db-wal" "${WORK_DIR}/data/sqlite.db-shm" 2>/dev/null || true
+    sqlite3 "${WORK_DIR}/data/sqlite.db" "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null 2>&1 || true
+  fi
+
   rm -rf ${TEMP_DIR}
 
   # 在本地记录还原文件名

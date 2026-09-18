@@ -150,21 +150,14 @@ if [[ "${DASHBOARD_UPDATE}${CLOUDFLARED_UPDATE}${IS_BACKUP}${FORCE_UPDATE}" =~ t
     fi
   fi
 
-  # 停止面板、通过 GitHub API 上传备份并对 main 分支强制覆盖（不克隆仓库、不留提交历史）
+  # 通过 GitHub API 上传备份并对 main 分支强制覆盖（不克隆仓库、不留提交历史）
+  # 在线热备：SQLite VACUUM INTO 一致性快照，面板全程运行，无需停机
   if [ "$IS_BACKUP" = 'true' ]; then
-    if [ "$IS_DOCKER" != 1 ]; then
-      cmd_systemctl disable >/dev/null 2>&1
-    else
-      supervisorctl stop nezha >/dev/null 2>&1
-    fi
-    sleep 10
-
     # 检查 wget 是否支持自定义 HTTP 方法（需要 GNU Wget >= 1.21）
     if ! wget --help 2>&1 | grep -q -- '--method'; then
       error "The wget in use has no --method support. Need GNU Wget >= 1.21; please install GNU wget (or curl) and retry."
     fi
 
-    # 优化数据库，感谢 longsays 的脚本
     # 检查并安装 sqlite3 依赖
     if ! command -v sqlite3 &> /dev/null; then
       echo "SQLite3 not found. Installing SQLite3..."
@@ -187,39 +180,51 @@ if [[ "${DASHBOARD_UPDATE}${CLOUDFLARED_UPDATE}${IS_BACKUP}${FORCE_UPDATE}" =~ t
       esac
     fi
 
-    # 1. 导出数据
-    sqlite3 "data/sqlite.db" <<EOF
-.output /tmp/tmp.sql
-.dump
-.quit
-EOF
-
-    # 2. 导入到新库
-    if [ $? -ne 0 ]; then
-      echo "Data export failed!"
+    # 1. 在线备份数据库：VACUUM INTO 生成一致性快照（失败回退 .backup），线上库零改动
+    TRANSFERS_KEEP_DAYS=7
+    BAK_TMP="/tmp/nezha-backup-$$"
+    rm -rf "$BAK_TMP"; mkdir -p "$BAK_TMP/data"
+    if [ -f "data/sqlite.db" ]; then
+      sqlite3 "data/sqlite.db" "PRAGMA wal_checkpoint(PASSIVE);" >/dev/null 2>&1 || true
+      if sqlite3 "data/sqlite.db" ".timeout 60000" "VACUUM INTO '$BAK_TMP/data/sqlite.db'" 2>/dev/null; then
+        info "Database hot-backup OK (VACUUM INTO)"
+      elif sqlite3 "data/sqlite.db" ".timeout 60000" ".backup '$BAK_TMP/data/sqlite.db'" 2>/dev/null; then
+        info "Database hot-backup OK (.backup)"
+      else
+        error "Database hot-backup failed!"
+      fi
+      # 2. 在副本上清理过期 transfers 流量记录并压缩（不动线上库，备份体积长期受控）
+      sqlite3 "$BAK_TMP/data/sqlite.db" ".timeout 60000" \
+        "DELETE FROM transfers WHERE created_at < date('now','-$TRANSFERS_KEEP_DAYS days');" >/dev/null 2>&1 || true
+      sqlite3 "$BAK_TMP/data/sqlite.db" 'VACUUM;' >/dev/null 2>&1 || true
     else
-      sqlite3 "/tmp/new.sqlite.db" <<EOF
-.read /tmp/tmp.sql
-.quit
-EOF
+      hint "\n No sqlite.db found, skip database backup. \n"
     fi
 
-    # 3. 检查导入是否成功
-    if [ $? -ne 0 ]; then
-      echo "Data import failed!"
-    else
-      # 覆盖原库并优化
-      mv -f "/tmp/new.sqlite.db" "data/sqlite.db"
-      sqlite3 "data/sqlite.db" 'VACUUM;'
-      [ $? -eq 0 ] && echo "Database migration and optimisation complete!" || echo "Database migration and optimisation failed!"
-      # 清理临时文件
-      rm -f /tmp/tmp.sql
+    # 3. 复制 data 其余文件（排除 tsdb / WAL / SHM，陈旧 WAL 配还原库是损坏经典来源）
+    for item in data/*; do
+      [ -e "$item" ] || continue
+      case "$(basename "$item")" in
+        sqlite.db|sqlite.db-wal|sqlite.db-shm|tsdb) ;;
+        *) cp -R "$item" "$BAK_TMP/data/" 2>/dev/null || true ;;
+      esac
+    done
+
+    # 4. resource/ 下自定义主题目录一并打包
+    if [ -d "resource" ]; then
+      find resource/ -type d -name "*custom*" > "$BAK_TMP/custom.list" || true
+      while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        mkdir -p "$BAK_TMP/$(dirname "$d")"
+        cp -R "$d" "$BAK_TMP/${d%/}"
+      done < "$BAK_TMP/custom.list"
     fi
 
-    # 只备份 data/ 目录下的 config.yaml 和 sqlite.db； resource/ 目录下名字有 custom 的自定义主题文件夹
+    # 5. 打包（文件名用下划线：冒号在 Windows 下载时会被改写，曾导致指针与文件名错位）
     TIME=$(date "+%Y-%m-%d-%H_%M_%S")
     echo "↓↓↓↓↓↓↓↓↓↓ dashboard-$TIME.tar.gz list ↓↓↓↓↓↓↓↓↓↓"
-    [ -d "resource" ] && find resource/ -type d -name "*custom*" | tar czvf /tmp/dashboard-$TIME.tar.gz -T- --exclude=data/tsdb data/ || tar czvf /tmp/dashboard-$TIME.tar.gz --exclude=data/tsdb data/
+    tar czvf /tmp/dashboard-$TIME.tar.gz -C "$BAK_TMP" data/ 2>/dev/null
+    rm -rf "$BAK_TMP"
     echo -e "↑↑↑↑↑↑↑↑↑↑ dashboard-$TIME.tar.gz list ↑↑↑↑↑↑↑↑↑↑\n\n"
 
     # 更新备份 Github 库：仅保留最近 $DAYS 个备份，其余随本次提交一同删除；全程通过 GitHub API，不克隆、不留历史
@@ -229,11 +234,20 @@ EOF
     else
       # 1. 上传新备份包的 blob（base64 编码为 GitHub Git Database API 接口要求）
       base64 /tmp/dashboard-$TIME.tar.gz | tr -d '\n' > /tmp/backup.b64
+      # 体积预检：base64 后超 47MB 会超过 GitHub API 上限，主动跳过并提示
+      B64_SIZE=$(wc -c < /tmp/backup.b64 | tr -d ' ')
+      if [ "$B64_SIZE" -gt 47000000 ]; then
+        rm -f $(awk -F '=' '/NO_ACTION_FLAG/{print $2; exit}' $WORK_DIR/restore.sh)*
+        hint "\n Backup too large after base64 ( $B64_SIZE bytes > 47MB ), upload skipped. Prune old data and retry. \n"
+        exit 0
+      fi
       { printf '{"content":"'; cat /tmp/backup.b64; printf '","encoding":"base64"}'; } > /tmp/blob_backup.json
-      BLOB_SHA=$(wget -qO- --method=POST --header="Authorization: token $GH_PAT" --header="Accept: application/vnd.github+json" --body-file=/tmp/blob_backup.json ${GH_PROXY}https://api.github.com/repos/$GH_BACKUP_USER/$GH_REPO/git/blobs | sed -n 's/.*"sha": *"\([0-9a-f]\{40\}\)".*/\1/p' | head -n1)
+      BLOB_SHA=$(wget -t 3 -T 30 -qO- --method=POST --header="Authorization: token $GH_PAT" --header="Accept: application/vnd.github+json" --body-file=/tmp/blob_backup.json ${GH_PROXY}https://api.github.com/repos/$GH_BACKUP_USER/$GH_REPO/git/blobs | sed -n 's/.*"sha": *"\([0-9a-f]\{40\}\)".*/\1/p' | head -n1)
 
-      # 2. 上传 README 的 blob，内容为最新备份文件名（restore.sh 依赖该文件的首行）
-      printf 'dashboard-%s.tar.gz\n' "$TIME" | base64 | tr -d '\n' > /tmp/readme.b64
+      # 2. 上传 README 的 blob：首行为最新备份文件名（restore.sh 依赖首行），附还原说明便于人工阅读
+      BACKUP_SIZE=$(du -h "/tmp/dashboard-$TIME.tar.gz" | cut -f1)
+      printf 'dashboard-%s.tar.gz\n\n- 备份时间: %s\n- 大小: %s\n- transfers 保留: 最近 %s 天\n\n## 手动触发备份\n将本文件内容改为 backup 后提交。\n\n## 指定还原\n将首行改为要恢复的备份文件名（须存在于本仓库），提交后自动还原。\n' \
+        "$TIME" "$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')" "$BACKUP_SIZE" "$TRANSFERS_KEEP_DAYS" | base64 | tr -d '\n' > /tmp/readme.b64
       { printf '{"content":"'; cat /tmp/readme.b64; printf '","encoding":"base64"}'; } > /tmp/blob_readme.json
       README_SHA=$(wget -qO- --method=POST --header="Authorization: token $GH_PAT" --header="Accept: application/vnd.github+json" --body-file=/tmp/blob_readme.json ${GH_PROXY}https://api.github.com/repos/$GH_BACKUP_USER/$GH_REPO/git/blobs | sed -n 's/.*"sha": *"\([0-9a-f]\{40\}\)".*/\1/p' | head -n1)
 
