@@ -76,6 +76,12 @@ supervisor 的 GOMEMLIMIT 按容器内存上限自动分配：面板 30%、caddy
 - **探针集体掉线重连**：根因是 v2.2.10 官方锁定的 grpc-go 1.81.1 会周期性重置 gRPC 连接（commit `24792fd`），修复版已升 1.83.0。与 Nginx/Caddy 无关，换反代没用
 - **面板鸡不上线**：先查三处——`config.yml` 的 `client_secret`、`config.yaml` 的 `agent_secret_key`、`server:` 是否为当前 Argo 域名；再查 WAF 封禁列表
 - **内存顶满**：不是泄漏，但**不要靠压低 GOMEMLIMIT 来解决**——压到低于工作集反而触发 GC 抖动（见第四节）。正解是按容器内存自动分配，或清理僵尸探针
+- **隧道静默失效（半开连接）**⚠️ *2026-09-21 发生过一次，观察中*
+  - 症状：全站 1033 / 探针集体掉线；但 `ss -tnp` 能看到 cloudflared 的 4 条 TCP **ESTABLISHED**、WARP 正常、容器能出网、`oom_kill 0`、**argo.log 里 6 小时没有任何连接事件**（既无 Unregistered 也无 Lost connection）
+  - 根因：容器唯一出口是 WARP（容器内无 IPv6），链路中间某跳静默丢包 → 连接在 CF 边缘侧已死、但本地 socket 与 cloudflared 都不知情（TCP 不主动探测空闲连接）。重启 argo 后日志出现 `already connected to this server, trying another address` = 僵尸连接残留的铁证
+  - 处置：`supervisorctl restart argo`（一条命令即恢复，无需重启其他进程）
+  - **待办（复发则实施）**：加外部看门狗——每 5 分钟从容器内 `curl https://$ARGO_DOMAIN/api/v1/setting`（走完整链路），连续 2 次失败则 `supervisorctl restart argo`。**不能用 cloudflared 自带的 /ready**，它在这种故障下会误报正常
+- **碰到的另一个坑：日志轮转未生效**：运行中容器是手工打的补丁，只有路径没有 `stdout_logfile_maxbytes=2MB`，所以按 supervisord 默认 50MB × 10 份滚动（磁盘占用可达几 GB）。重建容器后即按 2MB × 3 生效
 
 ## 九、故障排查入口（2026.9 事故后新增）
 
@@ -84,9 +90,11 @@ supervisor 的 GOMEMLIMIT 按容器内存上限自动分配：面板 30%、caddy
 | 场景 | 命令 |
 |---|---|
 | 隧道断连 / 1033 | `docker exec nezha_dashboard grep -iE "Registered\|Unregistered\|graceful shutdown" /dashboard/logs/argo.log \| tail -20` |
+| 判断是否"僵尸连接" | `docker exec nezha_dashboard ss -tnp \| grep cloudflared`（有 ESTABLISHED 但外部报 1033 = 半开连接，见第八节） |
 | 探针掉线（面板侧） | `docker exec nezha_dashboard grep "NEZHA>>" /dashboard/logs/nezha.log \| tail -30` |
 | 谁在疯狂重连 | `docker exec nezha_dashboard sh -c "grep -o 'clientID: [0-9]*' /dashboard/logs/nezha.log \| sort \| uniq -c \| sort -rn \| head"` |
 | 资源占用 | `docker stats --no-stream`；`uptime` |
+| 外部可达性（从本机） | `curl -s -o /dev/null -w "%{http_code}" https://nz.wbxl.dpdns.org/`（530/1033 = 隧道无活跃连接） |
 
 **判读要点**：
 - `Initiating graceful shutdown due to signal terminated` = 我们自己重启（配置变更），不是故障
