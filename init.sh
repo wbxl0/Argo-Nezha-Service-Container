@@ -393,7 +393,8 @@ EOF
   # 备份窗口内顺带重启 caddy，释放常驻内存（此时面板本就停机，无额外感知）
   ! grep -q 'supervisorctl restart grpcproxy' /etc/crontab && echo "$BACKUP_TIME root supervisorctl restart grpcproxy" >> /etc/crontab
   [ -s $WORK_DIR/restore.sh ] && ! grep -q "$WORK_DIR/restore.sh" /etc/crontab && echo "* * * * * root bash $WORK_DIR/restore.sh a" >> /etc/crontab
-  service cron restart
+  # cron 不再用 service 手动启动：容器启动流程里 service cron start/restart 起不来
+  # （实测 docker restart 后 pgrep cron 为空），改为交由 supervisord 托管，见下方 [program:cron]
 
 if [[ "$DASHBOARD_VERSION" =~ 0\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
    AG_RUN="$WORK_DIR/nezha-agent -s localhost:$GRPC_PORT -p $LOCAL_TOKEN --disable-auto-update --disable-force-update"
@@ -462,6 +463,16 @@ autostart=true
 autorestart=true
 redirect_stderr=true
 stdout_logfile=$WORK_DIR/logs/argo.log
+stdout_logfile_maxbytes=2MB
+stdout_logfile_backups=3
+
+# cron 由 supervisord 托管：autorestart 保证备份/续期/还原看门狗不会因启动流程问题而静默死掉
+[program:cron]
+command=/usr/sbin/cron -f
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=$WORK_DIR/logs/cron.log
 stdout_logfile_maxbytes=2MB
 stdout_logfile_backups=3
 EOF
