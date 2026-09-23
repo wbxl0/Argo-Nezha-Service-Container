@@ -481,5 +481,23 @@ EOF
 
 fi
 
+# damon.conf 只在首次启动时生成（见文件开头的 `if [ ! -s ... ]` 守卫），
+# 因此老容器重启时不会包含 [program:cron]。这里做一次幂等补齐：
+# 无论是否首次，只要缺就补上，保证 cron 始终由 supervisord 托管、不会随启动流程静默死掉。
+if [ -f /etc/supervisor/conf.d/damon.conf ] && ! grep -q '^\[program:cron\]' /etc/supervisor/conf.d/damon.conf; then
+  mkdir -p /dashboard/logs
+  cat >> /etc/supervisor/conf.d/damon.conf << EOF
+
+[program:cron]
+command=/usr/sbin/cron -f
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=/dashboard/logs/cron.log
+stdout_logfile_maxbytes=2MB
+stdout_logfile_backups=3
+EOF
+fi
+
 # 运行 supervisor 进程守护，并让其成为真正的 PID 1
 exec supervisord -c /etc/supervisor/supervisord.conf
