@@ -409,7 +409,12 @@ fi
   # 比例分配，任何环境变量（如 -e MEM_LIMIT_NEZHA=256MiB）都可单独覆盖。
   MEM_LIMIT_TOTAL=$(cat /sys/fs/cgroup/memory.max 2>/dev/null)
   [[ ! "$MEM_LIMIT_TOTAL" =~ ^[0-9]+$ ]] && MEM_LIMIT_TOTAL=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null)
-  { [[ ! "$MEM_LIMIT_TOTAL" =~ ^[0-9]+$ ]] || [ "$MEM_LIMIT_TOTAL" -gt 1099511627776 ]; } && MEM_LIMIT_TOTAL=$((2 * 1024 * 1024 * 1024))
+  # 容器未设置内存上限时，改用宿主机真实内存（而非固定 2G）：
+  # 1G/2G/4G 机器都能得到合适的 GOMEMLIMIT，小机器不会按 2G 过量分配。
+  if { [[ ! "$MEM_LIMIT_TOTAL" =~ ^[0-9]+$ ]] || [ "$MEM_LIMIT_TOTAL" -gt 1099511627776 ]; }; then
+    MEM_LIMIT_TOTAL=$(awk '/^MemTotal:/{print $2 * 1024; exit}' /proc/meminfo 2>/dev/null)
+    [[ ! "$MEM_LIMIT_TOTAL" =~ ^[0-9]+$ ]] && MEM_LIMIT_TOTAL=$((1 * 1024 * 1024 * 1024))
+  fi
   MEM_MB=$((MEM_LIMIT_TOTAL / 1048576))
   MEM_LIMIT_NEZHA=${MEM_LIMIT_NEZHA:-$((MEM_MB * 30 / 100))MiB}
   MEM_LIMIT_GRPCPROXY=${MEM_LIMIT_GRPCPROXY:-$((MEM_MB * 26 / 100))MiB}
