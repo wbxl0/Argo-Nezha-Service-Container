@@ -100,3 +100,23 @@ supervisor 的 GOMEMLIMIT 按容器内存上限自动分配：面板 30%、caddy
 - `Initiating graceful shutdown due to signal terminated` = 我们自己重启（配置变更），不是故障
 - **面板鸡（本机探针）是最佳对照组**：它走完整链路且路径最短，它稳定就说明面板/隧道侧健康；远端错误多通常是 Serverless（Vercel/Cloudflare/Streamlit）或免费 PaaS 的进程回收特性
 - 日志每个程序 2MB × 3 份轮转，`logs/` 不进备份包
+
+## 十、当前部署拓扑（2026.9 迁移后）
+
+| 角色 | 位置 | 说明 |
+|---|---|---|
+| **主面板** | **baico-gb（Oracle Cloud）** | 容器部署；数据每日（4 点后首次检查）自动备份到 `V1_backup`，容器启动时从该仓库自动还原 |
+| 冷备 | vpsfree | 容器停用（数据保留），需要时可切回 |
+
+**三条铁律**：
+1. **两个面板不能同时运行** —— 共用同一 Argo 隧道 token 时会注册成两个连接器，Cloudflare 把 agent 分给两边 → 数据分家
+2. 切换顺序：**先停当前 → 再起另一台**
+3. **`AGENT_SECRET_KEY` 必须保持一致**，改了会导致全部已注册探针失联
+
+**容器内存经验值（2026.9 反复踩到）**：
+
+156 台探针的面板 + 隧道 + 反代，实测占用 **450~500MB**。
+
+- **512MB 限额会涨满卡死**：cgroup `memory.current` 顶到上限后，内核疯狂回收内存（`memory.events` 的 `max` 计数可达数百万），所有进程分配内存被卡住 → 进程"活着但不响应" → 隧道死、面板全挂，对外表现为 **1033**（不是隧道本身的问题）
+- **诊断**：`cat /sys/fs/cgroup/memory.current` 对比限额，`cat /sys/fs/cgroup/memory.events` 看 `max`/`oom_kill`
+- **正解**：按实际规模给内存（**1GB 起**），实测 1GB 限额下稳定在 440MB 左右、余量充足；不要试图靠调小 GOMEMLIMIT 硬塞
