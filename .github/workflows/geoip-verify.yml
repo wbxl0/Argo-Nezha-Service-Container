@@ -4,6 +4,9 @@ name: "GeoIP override verification"
 # Dispatched manually on the geoip-verify branch; publishes nothing.
 
 on:
+  push:
+    branches:
+      - geoip-verify
   workflow_dispatch:
 
 permissions:
