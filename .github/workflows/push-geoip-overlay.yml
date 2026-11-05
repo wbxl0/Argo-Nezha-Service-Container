@@ -1,0 +1,37 @@
+name: "Push geoip overlay image"
+
+# Builds the overlay image (panel image + dashboard download source switched to
+# this fork) and pushes it to Docker Hub, because Unikraft cannot pull from a
+# private ghcr package. Docker Hub repos are public, so the converter can pull it.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  push-overlay:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      DOCKER_REPO: ${{ secrets.DOCKER_REPO }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Build and push overlay
+        run: |
+          set -euo pipefail
+          IMAGE="docker.io/${DOCKER_USERNAME}/${DOCKER_REPO}:geoip"
+          echo "IMAGE_REF_RESULT ${IMAGE}"
+          docker buildx build --platform linux/amd64 -t "$IMAGE" --push nz-geoip
+          echo "PUSHED ${IMAGE}"
