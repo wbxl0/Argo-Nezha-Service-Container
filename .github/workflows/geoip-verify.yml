@@ -1,0 +1,53 @@
+name: "GeoIP override verification"
+
+# Read-only verification of the CIDR override patch for pkg/geoip.
+# Dispatched manually on the geoip-verify branch; publishes nothing.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+
+      - name: Clone nezha v2.2.10
+        run: git clone --depth 1 --branch v2.2.10 https://github.com/nezhahq/nezha.git src
+
+      - name: Fetch ipinfo country database
+        run: |
+          set -euo pipefail
+          test -n "$IPINFO_TOKEN" || { echo "IPINFO_TOKEN missing"; exit 1; }
+          curl -fsSL --retry 3 --retry-all-errors \
+            -o src/pkg/geoip/geoip.db \
+            "https://ipinfo.io/data/free/country.mmdb?token=${IPINFO_TOKEN}"
+          ls -l src/pkg/geoip/geoip.db
+
+      - name: Apply override patch
+        run: |
+          cp patches/geoip.go src/pkg/geoip/geoip.go
+          cp patches/geoip_lookup_test.go src/pkg/geoip/geoip_lookup_test.go
+
+      - name: "RESULT: lookup with the stock database (no overrides)"
+        working-directory: src
+        run: go test -count=1 -v -run 'TestLookup$' ./pkg/geoip
+
+      - name: "RESULT: lookup with GEOIP_OVERRIDES=13.140.248.0/24=JP"
+        working-directory: src
+        env:
+          GEOIP_OVERRIDES: "13.140.248.0/24=JP"
+        run: go test -count=1 -v -run 'TestLookup$' ./pkg/geoip
+
+      - name: "RESULT: override parser unit test"
+        working-directory: src
+        run: go test -count=1 -v -run 'TestParseOverrides$' ./pkg/geoip
