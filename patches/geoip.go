@@ -45,7 +45,7 @@ var (
 		return db, nil
 	})
 
-	overrideOnce = sync.OnceValues(func() []overrideEntry {
+	overrideOnce = sync.OnceValue(func() []overrideEntry {
 		return parseOverrides(os.Getenv("GEOIP_OVERRIDES"))
 	})
 )
